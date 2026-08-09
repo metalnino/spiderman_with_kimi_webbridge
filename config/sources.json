@@ -1,20 +1,19 @@
 {
   "defaults": {
-    "trial_keywords": ["绿植租摆", "花卉租摆", "绿化养护"],
-    "delay_ms_min": 600,
-    "delay_ms_max": 1800,
-    "max_pages_per_keyword": 2,
-    "detail_sample_per_keyword": 3,
-    "city_filter": "title_or_province_match"
+    "trial_keywords": ["绿植租摆", "花卉租摆"],
+    "delay_ms_min": 800,
+    "delay_ms_max": 2200,
+    "max_pages_per_keyword": 1,
+    "entry": "python scripts/jobs/run_incremental.py",
+    "list_page": "python scripts/jobs/build_incremental_list.py → data/web/incremental.html"
   },
   "ccgp": {
     "enabled": true,
     "name": "中国政府采购网",
     "list_url": "https://search.ccgp.gov.cn/bxsearch",
     "time_type": "5",
-    "time_type_note": "5=近半年；默认近1周会漏冷门词",
-    "fetch_detail": true,
-    "rate_limit_note": "易触发「访问过于频繁」；需长间隔/退避；必要时 WebBridge"
+    "fetch_detail": false,
+    "rate_limit_note": "易频繁访问；失败记 crawl_runs"
   },
   "ggzy": {
     "enabled": true,
@@ -34,7 +33,9 @@
     "rp": 15
   },
   "cebpub": {
-    "enabled": false,
-    "note": "已有 trial_crawl_cebpub.py；本轮不重跑全量"
+    "enabled": true,
+    "name": "中国招标投标公共服务平台",
+    "list_url": "https://bulletin.cebpubservice.com/xxfbcmses/search/bulletin.html",
+    "note": "P0 全国词检索；详情验证码后置"
   }
 }

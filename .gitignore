@@ -15,5 +15,7 @@ data/crm/
 data/chinabidding/
 data/multi_site/
 data/data/
+# 列表页可本地生成；不强制提交大数据
+data/web/*.json
 
 # 保留目录占位可改用 .gitkeep；当前整目录忽略

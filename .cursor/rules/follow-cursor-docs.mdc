@@ -1,0 +1,13 @@
+---
+description: 按 .cursor/docs 过程文档开发与测试验收
+alwaysApply: true
+---
+
+# 按文档开发
+
+1. 开始任务前先读 `.cursor/docs/phases/当前阶段.md` 与对应 `phases/Px.md`。
+2. 架构/反爬/库表/筛选以 `.cursor/docs/` 下文档为准；配置与文档冲突时先改齐再写代码。
+3. 阶段完成必须同时勾选「开发任务」与「测试任务」；测试按 `testing/开发测试流程.md`（T1→T5）。
+4. 未通过测试不得把阶段标成完成；外部阻塞写明原因。
+5. 不要另起平行 markdown 计划目录；过程文档只放 `.cursor/docs/`。
+6. 产品侧只关心阶段勾选与 `testing/验收清单.md`；交付时主动更新勾选与测试记录。
