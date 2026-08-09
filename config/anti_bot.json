@@ -1,0 +1,74 @@
+{
+  "strategy": "http_main_webbridge_warm_session",
+  "principle": "HTTP 主爬；WebBridge 暖会话/过验证码/频控兜底；假动作不带 Cookie 无意义",
+  "notes": [
+    "日常增量：限速 HTTP；需要时先 WebBridge 打开站点拿 Cookie，再 HTTP 复用。",
+    "防封核心是限速与错峰，不是全程浏览器。",
+    "ctbpsp 详情 vaptcha：真人验证后复用会话。",
+    "ggzy：DEAL_TIME 必带；code=829 停词/降速。",
+    "chinabidding：info_search 列表；详情登录墙本期 list_only。",
+    "ccgp：易频繁访问；优先 WebBridge 或暖会话后慢速 HTTP；timeType=5。"
+  ],
+  "flow": [
+    "1 可选 warm：WebBridge navigate 目标站首页/搜索页，短停留",
+    "2 导出/复用 Cookie 到 HTTP Session",
+    "3 HTTP 带 UA+Referer+Cookie，jitter 间隔拉列表",
+    "4 遇频控/403/验证码 → 升级 WebBridge 或 pause_for_human",
+    "5 仍失败 → 列表字段入库，详情标记待补"
+  ],
+  "http": {
+    "timeout_sec": 20,
+    "retries": 2,
+    "delay_ms_min": 800,
+    "delay_ms_max": 2200,
+    "jitter": true,
+    "user_agent_rotate": false,
+    "reuse_cookies_from_webbridge": true
+  },
+  "webbridge": {
+    "use_when": [
+      "warm_session",
+      "ccgp_rate_limit",
+      "detail_after_captcha",
+      "manual_probe",
+      "source_site_hard_waf"
+    ],
+    "warm_session": {
+      "enabled": true,
+      "actions": ["open_home_or_search", "short_wait"],
+      "transfer": "cookie_to_http_session"
+    },
+    "action_delay_ms_min": 300,
+    "action_delay_ms_max": 1200,
+    "mouse_move_jitter": true,
+    "avoid_isTrusted_sites_without_cdp": true,
+    "captcha_policy": "pause_for_human"
+  },
+  "per_source": {
+    "ggzy": {
+      "primary": "http",
+      "warm": "optional",
+      "on_captcha_829": "stop_keyword_backoff"
+    },
+    "chinabidding": {
+      "primary": "http",
+      "warm": "optional",
+      "detail": "list_only"
+    },
+    "ccgp": {
+      "primary": "webbridge_or_warm_http",
+      "list_time_type": "5",
+      "delay_ms_min": 2500,
+      "delay_ms_max": 5000
+    },
+    "cebpub": {
+      "list": "http",
+      "detail": "webbridge_after_human_captcha"
+    }
+  },
+  "escalation": [
+    "列表 HTTP 超时/403 → 退避重试 → WebBridge 暖会话再 HTTP → WebBridge 直接采列表",
+    "详情验证码 → 人工完成 → 复用 Cookie",
+    "仍失败 → 只保留列表字段"
+  ]
+}

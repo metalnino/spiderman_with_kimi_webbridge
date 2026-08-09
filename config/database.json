@@ -1,0 +1,22 @@
+{
+  "engine": "mysql",
+  "database": "spiderman_bids",
+  "charset": "utf8mb4",
+  "collation": "utf8mb4_unicode_ci",
+  "env_file": ".env",
+  "schema": "sql/schema.sql",
+  "init_script": "scripts/init_db.py",
+  "python_helper": "scripts/db.py",
+  "mcp": {
+    "name": "spiderman-mysql",
+    "config": ".cursor/mcp.json",
+    "launcher": "scripts/mysql_mcp_launcher.py",
+    "package": "@benborla442/mcp-server-mysql"
+  },
+  "tables": ["notices", "entities", "crawl_runs"],
+  "notes": [
+    "凭证仅存 .env，勿提交",
+    "MCP 变更后需 Reload Window",
+    "控制台乱码不等于库内乱码；以 utf8mb4 为准"
+  ]
+}

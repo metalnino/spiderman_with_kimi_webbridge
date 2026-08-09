@@ -1,0 +1,134 @@
+{
+  "product": "绿植招采线索持续运营台",
+  "version": "1.0-draft",
+  "updated": "2026-08-09",
+  "scope": {
+    "fixed_sources": ["cebpub", "chinabidding", "ggzy", "ccgp"],
+    "deferred": ["江苏招标网"],
+    "goal": "持续增量可见、相对准确、关键词可迭代、运行/获取/清洗可观测"
+  },
+  "crawl_strategy": {
+    "principle": "HTTP主、WebBridge辅",
+    "anti_bot": {
+      "warm_session": "需要时 WebBridge 先打开站点完成轻量浏览/搜索，拿到 Cookie",
+      "http_reuse": "HTTP 携带同一会话 Cookie/Referer/UA，限速随机间隔拉数",
+      "not_rely_on": "无 Cookie 的假点击演戏",
+      "per_source": {
+        "ggzy": "HTTP getTradList + 限速；遇 829 停词/降速，必要时 WebBridge",
+        "chinabidding": "HTTP info_search 列表；详情登录墙本期不做",
+        "ccgp": "易频控：优先 WebBridge 搜列表，或暖会话后慢速 HTTP；详情慢速补金额",
+        "cebpub": "HTTP 列表；详情 vaptcha 人工过验证后复用会话"
+      }
+    }
+  },
+  "architecture": {
+    "language": "Python",
+    "storage": "MySQL spiderman_bids utf8mb4",
+    "layers": [
+      "sources/* 站点适配器",
+      "core/http + core/webbridge",
+      "pipeline 标准化/去重/清洗钩子/写库",
+      "jobs 增量/单站/清洗",
+      "scheduler 定时模块",
+      "web 展示台账"
+    ],
+    "heavy_frameworks": "不上 Scrapy/Airflow；轻量自研"
+  },
+  "modules": {
+    "crawl": {
+      "jobs": ["crawl_incremental", "crawl_one_source", "health_check"],
+      "output": ["raw archive optional", "notices upsert", "crawl_runs"]
+    },
+    "clean": {
+      "default": "规则：茎词+负向词+城市匹配+去重",
+      "ai_hooks_reserved": [
+        "classify_relevance",
+        "expand_keywords",
+        "extract_buyer"
+      ],
+      "ai_default": "off，失败降级规则"
+    },
+    "scheduler": {
+      "role": "核心模块但实现轻量",
+      "suggest_freq": "白天 1～2 小时；ccgp 更慢错峰",
+      "impl_options": ["Windows 任务计划", "APScheduler 常驻"]
+    },
+    "display": {
+      "tabs": [
+        "运行监控：任务状态/分站健康/频控验证码",
+        "信息获取：今日本周新增/增量列表/字段完整度",
+        "清洗质量：入库丢弃待复核/原因Top/词库命中",
+        "线索工作台：级联筛选+详情+词库管理"
+      ]
+    }
+  },
+  "filters_cascade": {
+    "order": [
+      "时间(发现时间默认|发布时间)",
+      "源站",
+      "省",
+      "市",
+      "可投标状态",
+      "关键词(active)",
+      "金额(有无/区间)"
+    ],
+    "rules": [
+      "上级变更清空下级",
+      "市依赖省；上海可省市同级",
+      "选采招网提示无金额详情",
+      "目标城可配置：南京上海苏州杭州深圳武汉合肥"
+    ]
+  },
+  "accuracy": {
+    "pipeline": "抓取→标准化→去重→相关度→城市→入库标增量",
+    "incremental_def": "source_id+external_id 或 content_hash 首次入库为 NEW",
+    "keyword_policy": "检索只用 active；场景词作标签不单独检索"
+  },
+  "phases": [
+    {
+      "id": "P0",
+      "name": "能持续转",
+      "deliverables": [
+        "反爬策略写入 anti_bot 并按站实现暖会话可选",
+        "四站增量爬 + upsert notices",
+        "crawl_runs 记录",
+        "基础增量列表页（时间/源站/城市）"
+      ]
+    },
+    {
+      "id": "P1",
+      "name": "能信能筛",
+      "deliverables": [
+        "清洗流水线+质量看板",
+        "完整级联筛选",
+        "词库管理（启用停用）",
+        "运行监控 Tab"
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "能运营",
+      "deliverables": [
+        "AI 钩子可开关",
+        "人工相关/不相关反馈",
+        "验证码待办队列"
+      ]
+    },
+    {
+      "id": "P3",
+      "name": "扩展",
+      "deliverables": ["江苏招标网", "采招网账号详情", "CRM 主体深化"]
+    }
+  ],
+  "open_decisions_defaulted": {
+    "incremental_sort": "默认首次发现时间（看增量）；可切换发布时间",
+    "city_scope": "先全国入库，列表默认筛 7 城（可关）",
+    "ui": "内部 Web 台账（监控+线索），不先做复杂权限"
+  },
+  "next_build_order": [
+    "更新 anti_bot.json 策略",
+    "P0：增量入库脚本（四站适配器骨架+写 notices/crawl_runs）",
+    "P0：最简增量列表页",
+    "再 P1 筛选与监控"
+  ]
+}

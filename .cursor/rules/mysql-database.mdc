@@ -1,0 +1,22 @@
+---
+description: 本工作区 MySQL 库用法（招采汇聚）
+alwaysApply: true
+---
+
+# MySQL 数据库（spiderman_bids）
+
+## 连接信息来源
+- 凭证只在项目根目录 `.env`（已 gitignore），不要写进代码/提交/聊天复述密码。
+- Python 统一用 `scripts/db.py` 的 `connect()` / `load_env()` / `ping()`。
+- Cursor MCP 名：`spiderman-mysql`（由 `scripts/mysql_mcp_launcher.py` 读 `.env` 启动）。
+
+## 库约定
+- 库名：`spiderman_bids`
+- 字符集：`utf8mb4` / `utf8mb4_unicode_ci`（必须支持中文）
+- 主表：`notices`（汇聚公告）、`entities`（CRM 主体）、`crawl_runs`（爬取批次）
+- Schema：`sql/schema.sql`；初始化：`python scripts/init_db.py`
+
+## 使用原则
+- 爬虫落库走 upsert（`source_id + external_id` 或 `content_hash` 去重）。
+- MCP 默认可查/可写公告；删除操作默认关闭（`MYSQL_ALLOW_DELETE=false`）。
+- 不要新建第二套平行库，除非用户明确要求。

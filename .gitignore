@@ -1,0 +1,19 @@
+.env
+.env.local
+.cursor/mcp.local.json
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.log
+.DS_Store
+
+# 本地爬取样本与探针缓存（体积大、含动态数据）
+data/trial/
+data/trial_multi/
+data/crm/
+data/chinabidding/
+data/multi_site/
+data/data/
+
+# 保留目录占位可改用 .gitkeep；当前整目录忽略

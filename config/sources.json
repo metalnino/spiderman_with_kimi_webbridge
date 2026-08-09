@@ -1,0 +1,40 @@
+{
+  "defaults": {
+    "trial_keywords": ["绿植租摆", "花卉租摆", "绿化养护"],
+    "delay_ms_min": 600,
+    "delay_ms_max": 1800,
+    "max_pages_per_keyword": 2,
+    "detail_sample_per_keyword": 3,
+    "city_filter": "title_or_province_match"
+  },
+  "ccgp": {
+    "enabled": true,
+    "name": "中国政府采购网",
+    "list_url": "https://search.ccgp.gov.cn/bxsearch",
+    "time_type": "5",
+    "time_type_note": "5=近半年；默认近1周会漏冷门词",
+    "fetch_detail": true,
+    "rate_limit_note": "易触发「访问过于频繁」；需长间隔/退避；必要时 WebBridge"
+  },
+  "ggzy": {
+    "enabled": true,
+    "name": "全国公共资源交易平台",
+    "api": "https://www.ggzy.gov.cn/information/pubTradingInfo/getTradList",
+    "deal_time": "05",
+    "referer": "https://www.ggzy.gov.cn/deal/dealList.html",
+    "fetch_detail": false,
+    "captcha_policy": "stop_keyword_on_829"
+  },
+  "chinabidding": {
+    "enabled": true,
+    "name": "中国采购与招标网",
+    "list_api": "https://www.chinabidding.com.cn/sdbxinfo/313035392e302e7379675f62616e64/datax/json/info_search",
+    "detail_host": "https://www.chinabidding.cn",
+    "mode": "list_only",
+    "rp": 15
+  },
+  "cebpub": {
+    "enabled": false,
+    "note": "已有 trial_crawl_cebpub.py；本轮不重跑全量"
+  }
+}

@@ -1,0 +1,10 @@
+{
+  "mcpServers": {
+    "spiderman-mysql": {
+      "command": "python",
+      "args": [
+        "D:/work/cursor_workspace/spiderman_with_kimi_webbridge/scripts/mysql_mcp_launcher.py"
+      ]
+    }
+  }
+}

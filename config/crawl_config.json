@@ -1,0 +1,152 @@
+{
+  "source": {
+    "name": "中国招标投标公共服务平台",
+    "list_url": "https://bulletin.cebpubservice.com/xxfbcmses/search/bulletin.html",
+    "detail_url_template": "https://ctbpsp.com/#/bulletinDetail?uuid={uuid}&inpvalue=&dataSource=0&tenderAgency=",
+    "category_id": "88",
+    "dates": "300",
+    "show_status": "1",
+    "open_filter": {
+      "comment": "站点 status=02 表示开标时间>现在(未开标)；01 为已开标。本地也用 open_time 与当前时间比较。",
+      "status_open": "02",
+      "status_closed": "01"
+    }
+  },
+  "keywords": {
+    "core": [
+      "绿植租摆",
+      "绿植租赁",
+      "花卉租摆",
+      "室内绿化",
+      "室外绿化",
+      "绿化养护",
+      "园林养护"
+    ],
+    "scene": [
+      "足球场养护",
+      "球场养护",
+      "草坪养护",
+      "屋顶绿化",
+      "立体绿化",
+      "垂直绿化",
+      "植物墙",
+      "绿墙",
+      "道路绿化",
+      "园区绿化",
+      "物业绿化",
+      "景观养护",
+      "绿化管养",
+      "苗木采购",
+      "花卉采购",
+      "盆栽",
+      "绿雕",
+      "花境",
+      "补植",
+      "移栽"
+    ],
+    "commercial": [
+      "商业综合体绿化",
+      "商业体绿化",
+      "购物中心绿化",
+      "商场绿植",
+      "商场绿化",
+      "写字楼绿植",
+      "写字楼绿化",
+      "办公楼绿植",
+      "办公楼绿化",
+      "售楼处绿植",
+      "酒店绿植",
+      "酒店绿化",
+      "商业街绿化",
+      "大堂绿植",
+      "商业空间绿化",
+      "会所绿化",
+      "展厅绿植",
+      "门店绿植",
+      "商超绿化",
+      "室内植物租赁"
+    ],
+    "weak_or_noisy": [
+      "绿植业务",
+      "绿植售卖",
+      "绿化工程",
+      "园林绿化"
+    ],
+    "active": [
+      "绿植租摆",
+      "花卉租摆",
+      "室内绿化",
+      "室外绿化",
+      "绿化养护",
+      "园林养护",
+      "草坪养护",
+      "足球场养护",
+      "绿化管养",
+      "物业绿化",
+      "园区绿化",
+      "苗木采购",
+      "花卉采购",
+      "立体绿化",
+      "植物墙",
+      "室内植物租赁"
+    ],
+    "scene_as_tag_only": [
+      "酒店绿植",
+      "酒店绿化",
+      "写字楼绿植",
+      "办公楼绿化",
+      "售楼处绿植",
+      "商业综合体绿化",
+      "商业空间绿化",
+      "会所绿化",
+      "大堂绿植",
+      "屋顶绿化",
+      "购物中心绿化",
+      "商场绿植"
+    ]
+  },
+  "cities": [
+    {
+      "name": "南京",
+      "province": "江苏",
+      "area_code": "320000"
+    },
+    {
+      "name": "上海",
+      "province": "上海",
+      "area_code": "310000"
+    },
+    {
+      "name": "苏州",
+      "province": "江苏",
+      "area_code": "320000"
+    },
+    {
+      "name": "杭州",
+      "province": "浙江",
+      "area_code": "330000"
+    },
+    {
+      "name": "深圳",
+      "province": "广东",
+      "area_code": "440000"
+    },
+    {
+      "name": "武汉",
+      "province": "湖北",
+      "area_code": "420000"
+    },
+    {
+      "name": "合肥",
+      "province": "安徽",
+      "area_code": "340000"
+    }
+  ],
+  "notes": {
+    "area_granularity": "站点 area 仅为省级；城市靠标题/正文二次匹配",
+    "city_filter_mode": "province_then_title",
+    "keyword_usage": "爬虫读取 keywords.active；commercial=商业体场景；weak_or_noisy 噪声大",
+    "bid_status": "可投标 ≈ open_time > now；已开标 ≈ open_time <= now。最终以官网报名截止为准。",
+    "relevance": "场景词不再单独检索；标题需正茎词且过负向过滤"
+  }
+}

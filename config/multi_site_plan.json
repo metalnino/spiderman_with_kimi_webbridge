@@ -1,0 +1,43 @@
+{
+  "goal": "WebBridge 分析国家级招投标站：结构→绿植关键词试搜→难点与替代方案",
+  "sites": [
+    {
+      "id": "cebpub",
+      "name": "中国招标投标公共服务平台",
+      "status": "done",
+      "hosts": ["bulletin.cebpubservice.com", "ctbpsp.com"]
+    },
+    {
+      "id": "chinabidding",
+      "name": "中国采购与招标网",
+      "status": "done",
+      "hosts": ["www.chinabidding.com.cn", "www.chinabidding.cn"],
+      "report": "data/multi_site/chinabidding_report.json"
+    },
+    {
+      "id": "ggzy",
+      "name": "全国公共资源交易平台",
+      "status": "done",
+      "hosts": ["www.ggzy.gov.cn", "deal.ggzy.gov.cn"],
+      "report": "data/multi_site/ggzy_report.json"
+    },
+    {
+      "id": "ccgp",
+      "name": "中国政府采购网",
+      "status": "done",
+      "hosts": ["www.ccgp.gov.cn"],
+      "report": "data/multi_site/ccgp_report.json"
+    }
+  ],
+  "method": [
+    "1 可达性：WebBridge navigate + HTTP 对照",
+    "2 入口：搜索框/频道/列表 URL",
+    "3 用关键词测试：绿植租摆、绿化养护、花卉租摆、室内绿化（至少2个）",
+    "4 列表字段：标题/时间/地区/金额是否可见",
+    "5 详情：能否打开、是否登录/会员/验证码",
+    "6 难点分级：账号/验证码/WAF/SPA接口/付费墙",
+    "7 替代方案：地方站/只抓列表/人工登录后会话"
+  ],
+  "keywords": ["绿植租摆", "绿化养护", "花卉租摆", "室内绿化"],
+  "output_dir": "data/multi_site"
+}

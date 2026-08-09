@@ -1,0 +1,24 @@
+{
+  "priority": "high",
+  "fields": [
+    {"key": "title", "from": "list", "required": true, "note": "公告标题"},
+    {"key": "uuid", "from": "list", "required": true, "note": "详情主键"},
+    {"key": "city", "from": "list+title", "required": true, "note": "城市（省级筛选+标题匹配）"},
+    {"key": "province", "from": "list", "required": true},
+    {"key": "keyword", "from": "query", "required": true},
+    {"key": "publish_date", "from": "list", "required": true, "note": "发布日期"},
+    {"key": "open_time", "from": "list", "required": true, "note": "开标时间；用于可投标判断"},
+    {"key": "bid_status", "from": "derived", "required": true, "note": "可投标/已开标"},
+    {"key": "industry", "from": "list", "required": false},
+    {"key": "region", "from": "list", "required": false},
+    {"key": "source", "from": "list", "required": true, "note": "发布来源平台名"},
+    {"key": "source_url", "from": "map/detail", "required": false, "note": "来源平台入口；比聚合详情更稳"},
+    {"key": "official_url", "from": "detail_route", "required": true, "note": "ctbpsp 聚合详情，常需验证码"},
+    {"key": "amount", "from": "detail", "required": false, "note": "预算/限价；详情接口加密+验证码，当前难稳定拿到"},
+    {"key": "amount_text", "from": "detail", "required": false},
+    {"key": "buyer", "from": "detail/title", "required": false, "note": "招标人/采购人=CRM主体"},
+    {"key": "agency", "from": "detail", "required": false, "note": "代理机构"},
+    {"key": "deadline", "from": "detail", "required": false, "note": "报名/投标截止，优于仅看开标时间"},
+    {"key": "project_code", "from": "detail", "required": false}
+  ]
+}
