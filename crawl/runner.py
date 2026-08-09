@@ -1,42 +1,58 @@
 from __future__ import annotations
 
-from crawl.config_loader import sources_cfg, trial_keywords
+from crawl.captcha_queue import open_todo
+from crawl.config_loader import sources_cfg
 from crawl.db_store import finish_run, start_run, upsert_notices
+from crawl.keywords import enabled_keywords
+from crawl.pipeline.apply_clean import refresh_clean_status
 from crawl.sources import get_source
+from crawl.warm_session import warm_source
 
 
 def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: int = 1) -> dict:
-    kws = keywords or trial_keywords()
-    # P0 控规模：默认最多 2 个词
+    kws = keywords or enabled_keywords()
     kws = kws[:2]
     src = get_source(source_id)
+    warm_info = warm_source(source_id, src.http)
     run_id = start_run(source_id)
     try:
         notices = list(src.fetch(kws, max_pages=max_pages))
         stats = upsert_notices(notices)
+        clean_stats = refresh_clean_status(limit=max(200, stats["attempted"] * 3))
+        # cebpub 详情验证码：为样本登记待办（不阻塞列表）
+        if source_id == "cebpub":
+            for n in notices[:3]:
+                if n.detail_url:
+                    open_todo(source_id, n.detail_url, n.title, note="detail_may_need_captcha")
         finish_run(
             run_id,
             status="success",
             item_count=stats["attempted"],
-            note=f"upsert affected≈{stats['affected']} keywords={kws}",
+            note=f"upsert≈{stats['affected']} clean={clean_stats} warm={warm_info.get('warmed')} kw={kws}",
         )
         return {
             "source_id": source_id,
             "run_id": run_id,
             "status": "success",
             "keywords": kws,
+            "clean": clean_stats,
+            "warm": warm_info,
             **stats,
         }
     except Exception as e:  # noqa: BLE001
-        finish_run(run_id, status="failed", item_count=0, note=str(e)[:500])
+        err = str(e)
+        if "captcha" in err.lower() or "rate_limited" in err.lower() or "829" in err:
+            open_todo(source_id, f"source://{source_id}", title=source_id, note=err[:200])
+        finish_run(run_id, status="failed", item_count=0, note=err[:500])
         return {
             "source_id": source_id,
             "run_id": run_id,
             "status": "failed",
-            "error": str(e),
+            "error": err,
             "attempted": 0,
             "affected": 0,
             "keywords": kws,
+            "warm": warm_info,
         }
 
 

@@ -1,0 +1,7 @@
+{
+  "enabled": false,
+  "endpoint": "",
+  "timeout_sec": 8,
+  "hooks": ["classify_relevance", "expand_keywords", "extract_buyer"],
+  "note": "默认关闭；开启后失败必须降级规则"
+}
