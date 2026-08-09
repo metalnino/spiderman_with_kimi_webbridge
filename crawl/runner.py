@@ -58,7 +58,7 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
 
 def run_incremental(*, sources: list[str] | None = None, max_pages: int = 1) -> list[dict]:
     cfg = sources_cfg()
-    order = sources or ["ggzy", "chinabidding", "cebpub", "ccgp"]
+    order = sources or ["ggzy", "chinabidding", "cebpub", "ccgp", "jsggzy"]
     results = []
     for sid in order:
         sc = cfg.get(sid) or {}

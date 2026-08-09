@@ -99,6 +99,40 @@ class TestWarm(unittest.TestCase):
         self.assertIn("warmed", r)
 
 
+class TestP3(unittest.TestCase):
+    def test_jsggzy_registered(self):
+        from crawl.sources import REGISTRY, get_source
+
+        self.assertIn("jsggzy", REGISTRY)
+        src = get_source("jsggzy")
+        self.assertEqual(src.source_id, "jsggzy")
+
+    def test_chinabidding_detail_without_cookie(self):
+        from crawl.sources.chinabidding_detail import cookie_from_env, fetch_detail_fields
+
+        # 无 cookie 时行为可预期：不抛异常；login_wall 多为 True
+        self.assertTrue(cookie_from_env() is None or isinstance(cookie_from_env(), str))
+        # 使用公开列表页 URL 做降级探测可能 404；用站点首页验证函数可调用
+        out = fetch_detail_fields("https://www.chinabidding.cn/")
+        self.assertIn("has_cookie", out)
+        self.assertIn("login_wall", out)
+
+    def test_jsggzy_fetch_sample(self):
+        from crawl.sources.jsggzy import JsggzySource
+
+        src = JsggzySource()
+        items = list(src.fetch(["绿化养护"], max_pages=1))
+        self.assertGreater(len(items), 0)
+        self.assertTrue(all(i.province == "江苏" or "江苏" in (i.region_text or "") for i in items[:5]))
+
+    def test_crm_build(self):
+        sys.path.insert(0, str(ROOT / "scripts" / "jobs"))
+        import build_crm_db
+
+        build_crm_db.main()
+        self.assertTrue((ROOT / "data" / "web" / "crm.html").exists())
+
+
 class TestDBOps(unittest.TestCase):
     @classmethod
     def setUpClass(cls):

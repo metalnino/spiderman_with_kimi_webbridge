@@ -37,5 +37,17 @@
     "name": "中国招标投标公共服务平台",
     "list_url": "https://bulletin.cebpubservice.com/xxfbcmses/search/bulletin.html",
     "note": "P0 全国词检索；详情验证码后置"
+  },
+  "jsggzy": {
+    "enabled": true,
+    "name": "江苏省公共资源交易网",
+    "home": "http://jsggzy.jszwfw.gov.cn/",
+    "list_page": "http://jsggzy.jszwfw.gov.cn/jyxx/tradeInfonew.html",
+    "search_api": "http://jsggzy.jszwfw.gov.cn/inteligentsearch/rest/esinteligentsearch/getFullTextDataNew",
+    "note": "主路径：全国ggzy+DEAL_PROVINCE=320000；辅路径省站API（证书不稳时跳过）"
+  },
+  "chinabidding_detail": {
+    "cookie_env": "CHINABIDDING_COOKIE",
+    "note": "未配置 Cookie 时仅列表；配置后可尝试详情字段"
   }
 }

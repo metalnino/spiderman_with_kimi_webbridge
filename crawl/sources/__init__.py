@@ -2,12 +2,14 @@ from crawl.sources.cebpub import CebpubSource
 from crawl.sources.chinabidding import ChinabiddingSource
 from crawl.sources.ccgp import CcgpSource
 from crawl.sources.ggzy import GgzySource
+from crawl.sources.jsggzy import JsggzySource
 
 REGISTRY = {
     "cebpub": CebpubSource,
     "chinabidding": ChinabiddingSource,
     "ggzy": GgzySource,
     "ccgp": CcgpSource,
+    "jsggzy": JsggzySource,
 }
 
 

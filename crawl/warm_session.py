@@ -17,6 +17,7 @@ WARM_URLS = {
     "chinabidding": "https://www.chinabidding.com.cn/",
     "ccgp": "https://www.ccgp.gov.cn/",
     "cebpub": "https://bulletin.cebpubservice.com/",
+    "jsggzy": "http://jsggzy.jszwfw.gov.cn/",
 }
 
 

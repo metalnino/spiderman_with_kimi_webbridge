@@ -14,7 +14,7 @@ from crawl.runner import run_source  # noqa: E402
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("source_id", choices=["cebpub", "chinabidding", "ggzy", "ccgp"])
+    ap.add_argument("source_id", choices=["cebpub", "chinabidding", "ggzy", "ccgp", "jsggzy"])
     ap.add_argument("--pages", type=int, default=1)
     ap.add_argument("--keywords", type=str, default="绿植租摆")
     args = ap.parse_args()
