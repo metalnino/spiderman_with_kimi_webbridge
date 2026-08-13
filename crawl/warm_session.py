@@ -4,13 +4,9 @@ from __future__ import annotations
 import json
 import os
 import time
-import urllib.request
-from pathlib import Path
 
+from crawl import cookie_store, webbridge_client
 from crawl.config_loader import ROOT, anti_bot_cfg
-from crawl.http_session import HttpSession
-
-WB = "http://127.0.0.1:10086/command"
 
 WARM_URLS = {
     "ggzy": "https://www.ggzy.gov.cn/",
@@ -18,14 +14,8 @@ WARM_URLS = {
     "ccgp": "https://www.ccgp.gov.cn/",
     "cebpub": "https://bulletin.cebpubservice.com/",
     "jsggzy": "http://jsggzy.jszwfw.gov.cn/",
+    "jiangsu_zhaobiao": "https://jiangsu.zhaobiao.cn/",
 }
-
-
-def _wb_call(action: str, args: dict | None = None, session: str = "warm") -> dict:
-    body = json.dumps({"action": action, "args": args or {}, "session": session}, ensure_ascii=False).encode("utf-8")
-    req = urllib.request.Request(WB, data=body, headers={"Content-Type": "application/json"})
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        return json.loads(resp.read().decode("utf-8"))
 
 
 def should_warm(source_id: str) -> bool:
@@ -38,7 +28,7 @@ def should_warm(source_id: str) -> bool:
     return per.get("warm") is True
 
 
-def warm_source(source_id: str, http: HttpSession | None = None) -> dict:
+def warm_source(source_id: str, http=None) -> dict:
     """Navigate via WebBridge when daemon available; never crash caller."""
     if not should_warm(source_id):
         return {"warmed": False, "reason": "not_required"}
@@ -46,10 +36,20 @@ def warm_source(source_id: str, http: HttpSession | None = None) -> dict:
     if not url:
         return {"warmed": False, "reason": "no_url"}
     try:
-        nav = _wb_call("navigate", {"url": url, "newTab": True, "group_title": f"warm-{source_id}"})
+        session = f"warm-{source_id}"
+        nav = webbridge_client.navigate(url, session=session, group_title=f"warm-{source_id}")
         time.sleep(2)
-        # Cookie export API may be unavailable; mark warm attempted
-        out = {"warmed": bool(nav.get("ok")), "url": url, "nav_ok": nav.get("ok")}
+        exported = webbridge_client.export_document_cookie(session)
+        if exported.get("ok") and exported.get("cookie"):
+            cookie_store.save_cookie_header(source_id, exported["cookie"], meta={"from": "warm"})
+            if http is not None and hasattr(http, "load_stored_cookies"):
+                http.load_stored_cookies(source_id)
+        out = {
+            "warmed": bool(nav.get("ok") or exported.get("cookie")),
+            "url": url,
+            "nav_ok": bool(nav.get("ok")),
+            "cookie_saved": bool(exported.get("cookie")),
+        }
         log = ROOT / "data" / "web" / "warm_log.jsonl"
         log.parent.mkdir(parents=True, exist_ok=True)
         with log.open("a", encoding="utf-8") as f:

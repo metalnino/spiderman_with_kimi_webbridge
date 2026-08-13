@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT))
 from crawl.dashboard import build_dashboard  # noqa: E402
 from crawl.keywords import seed_keywords_from_config  # noqa: E402
 from crawl.runner import run_incremental  # noqa: E402
-from crawl.web_list import build_incremental_html  # noqa: E402
+from crawl.web_list import build_incremental_list  # noqa: E402
 
 
 def main():
@@ -31,7 +31,7 @@ def main():
     out.parent.mkdir(parents=True, exist_ok=True)
     out.write_text(json.dumps(results, ensure_ascii=False, indent=2), encoding="utf-8")
     if not args.no_list:
-        print("LIST", build_incremental_html())
+        print("LIST", build_incremental_list())
         print("DASHBOARD", build_dashboard())
     print(json.dumps(results, ensure_ascii=False, indent=2))
     oks = [r for r in results if r.get("status") == "success"]

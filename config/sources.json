@@ -49,5 +49,15 @@
   "chinabidding_detail": {
     "cookie_env": "CHINABIDDING_COOKIE",
     "note": "未配置 Cookie 时仅列表；配置后可尝试详情字段"
+  },
+  "jiangsu_zhaobiao": {
+    "enabled": true,
+    "name": "江苏招标网",
+    "home": "https://jiangsu.zhaobiao.cn/",
+    "search_api": "https://jiangsu.zhaobiao.cn/psearch/Dqsearch",
+    "login_page": "https://user.zhaobiao.cn/login.html",
+    "login_required": true,
+    "cred_env": ["JIANGSU_ZHAOBIAO_USER", "JIANGSU_ZHAOBIAO_PASS"],
+    "note": "列表可匿名；登录含滑块验证码，失败则 captcha_todos + Cookie 回灌"
   }
 }

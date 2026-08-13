@@ -1,7 +1,9 @@
 """Stdlib unittest suite (pytest unavailable due to pip/ssl)."""
 from __future__ import annotations
 
+import importlib.util
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -12,6 +14,9 @@ from unittest import mock
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
+
+# 真实外网抓取测试：默认跳过，设 SPIDER_LIVE_TESTS=1 才跑（避免站点抖动打挂套件）
+LIVE = os.environ.get("SPIDER_LIVE_TESTS") == "1"
 
 
 class TestClean(unittest.TestCase):
@@ -107,6 +112,24 @@ class TestP3(unittest.TestCase):
         src = get_source("jsggzy")
         self.assertEqual(src.source_id, "jsggzy")
 
+    def test_jiangsu_zhaobiao_registered(self):
+        from crawl.sources import REGISTRY, get_source
+
+        self.assertIn("jiangsu_zhaobiao", REGISTRY)
+        src = get_source("jiangsu_zhaobiao")
+        self.assertEqual(src.source_id, "jiangsu_zhaobiao")
+
+    @unittest.skipUnless(LIVE, "live network test (set SPIDER_LIVE_TESTS=1)")
+    def test_jiangsu_zhaobiao_fetch_sample(self):
+        from crawl.sources.jiangsu_zhaobiao import JiangsuZhaobiaoSource
+
+        src = JiangsuZhaobiaoSource()
+        items = list(src.fetch(["绿化养护"], max_pages=1))
+        self.assertGreater(len(items), 0)
+        self.assertTrue(all(i.source_id == "jiangsu_zhaobiao" for i in items[:5]))
+        self.assertTrue(any("bidding_v_" in (i.detail_url or "") or "_v_" in (i.detail_url or "") for i in items[:10]))
+
+    @unittest.skipUnless(LIVE, "live network test (set SPIDER_LIVE_TESTS=1)")
     def test_chinabidding_detail_without_cookie(self):
         from crawl.sources.chinabidding_detail import cookie_from_env, fetch_detail_fields
 
@@ -117,6 +140,7 @@ class TestP3(unittest.TestCase):
         self.assertIn("has_cookie", out)
         self.assertIn("login_wall", out)
 
+    @unittest.skipUnless(LIVE, "live network test (set SPIDER_LIVE_TESTS=1)")
     def test_jsggzy_fetch_sample(self):
         from crawl.sources.jsggzy import JsggzySource
 
@@ -131,6 +155,101 @@ class TestP3(unittest.TestCase):
 
         build_crm_db.main()
         self.assertTrue((ROOT / "data" / "web" / "crm.html").exists())
+
+
+class TestLedgerAPI(unittest.TestCase):
+    def test_bind_localhost_only(self):
+        from crawl.ledger_server import make_server
+
+        with self.assertRaises(ValueError):
+            make_server("1.2.3.4", 18765)
+        # Docker/NAS 允许 0.0.0.0
+        httpd = make_server("0.0.0.0", 0)
+        httpd.server_close()
+
+    def test_route_readonly_and_notices(self):
+        from crawl.ledger_server import route_api
+
+        code, health = route_api("/api/health", {})
+        self.assertEqual(code, 200)
+        self.assertTrue(health.get("ok"))
+        code, meta = route_api("/api/meta", {})
+        self.assertEqual(code, 200)
+        self.assertIn("province_city", meta)
+        code, notices = route_api("/api/notices", {"limit": ["5"]})
+        self.assertEqual(code, 200)
+        self.assertIn("items", notices)
+        self.assertLessEqual(len(notices["items"]), 5)
+        code, missing = route_api("/api/nope", {})
+        self.assertEqual(code, 404)
+
+    def test_http_get_and_reject_post(self):
+        import threading
+        import urllib.error
+        import urllib.request
+
+        from crawl.ledger_server import make_server
+
+        httpd = make_server("127.0.0.1", 0)
+        host, port = httpd.server_address[:2]
+        base = f"http://{host}:{port}"
+        t = threading.Thread(target=httpd.serve_forever, daemon=True)
+        t.start()
+        try:
+            with urllib.request.urlopen(base + "/api/health", timeout=5) as resp:
+                body = json.loads(resp.read().decode("utf-8"))
+            self.assertTrue(body.get("ok"))
+            with urllib.request.urlopen(base + "/", timeout=5) as resp:
+                html = resp.read().decode("utf-8")
+            self.assertIn("绿植招采运营台", html)
+            req = urllib.request.Request(base + "/api/health", method="POST", data=b"{}")
+            with self.assertRaises(urllib.error.HTTPError) as cm:
+                urllib.request.urlopen(req, timeout=5)
+            self.assertEqual(cm.exception.code, 405)
+            # captcha POST 允许（坏 id → 400）
+            req2 = urllib.request.Request(
+                base + "/api/captcha/open",
+                method="POST",
+                data=b'{"id":0}',
+                headers={"Content-Type": "application/json"},
+            )
+            with self.assertRaises(urllib.error.HTTPError) as cm2:
+                urllib.request.urlopen(req2, timeout=5)
+            self.assertEqual(cm2.exception.code, 400)
+        finally:
+            httpd.shutdown()
+            httpd.server_close()
+
+
+class TestCaptchaFlow(unittest.TestCase):
+    def test_cookie_store_roundtrip(self):
+        from crawl import cookie_store
+
+        p = cookie_store.save_cookie_header("unittest_src", "a=1; b=2", meta={"t": 1})
+        self.assertTrue(p.exists())
+        self.assertEqual(cookie_store.cookie_header("unittest_src"), "a=1; b=2")
+        st = cookie_store.status("unittest_src")
+        self.assertTrue(st["has_cookie"])
+        p.unlink(missing_ok=True)
+
+    def test_open_and_resolve_with_paste(self):
+        from crawl.captcha_flow import open_for_human, resolve_todo
+        from crawl.captcha_queue import open_todo
+        from crawl import cookie_store
+
+        tid = open_todo("cebpub", "https://example.com/captcha-test", "单元测试待办", "ut")
+        with mock.patch("crawl.captcha_flow.webbridge_client.available", return_value=False), mock.patch(
+            "crawl.captcha_flow.webbrowser.open", return_value=True
+        ) as wb:
+            out = open_for_human(tid)
+        self.assertTrue(out.get("ok"))
+        self.assertTrue(out.get("fallback_browser"))
+        wb.assert_called()
+        done = resolve_todo(tid, cookie_header="sid=abc; path=/")
+        self.assertTrue(done.get("ok"))
+        self.assertTrue(done.get("cookie_saved"))
+        self.assertEqual(cookie_store.cookie_header("cebpub"), "sid=abc; path=/")
+        cookie_store.path_for("cebpub").unlink(missing_ok=True)
 
 
 class TestDBOps(unittest.TestCase):
@@ -206,6 +325,17 @@ class TestDBOps(unittest.TestCase):
         self.assertIn("运行监控", text)
         self.assertIn("线索工作台", text)
         self.assertIn("验证码待办", text)
+
+
+class TestEntry(unittest.TestCase):
+    def test_run_incremental_entry_imports(self):
+        """主增量入口 import 链必须可用（曾因 build_incremental_html 拼错而崩）。"""
+        spec = importlib.util.spec_from_file_location(
+            "run_incremental", str(ROOT / "scripts" / "jobs" / "run_incremental.py")
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        self.assertTrue(callable(mod.main))
 
 
 if __name__ == "__main__":

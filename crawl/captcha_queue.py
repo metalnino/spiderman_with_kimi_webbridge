@@ -13,6 +13,14 @@ def open_todo(source_id: str, detail_url: str, title: str | None = None, note: s
     conn = connect(autocommit=True)
     try:
         with conn.cursor() as cur:
+            # 幂等：同一 source+url 已有 open 待办则复用，避免 cebpub 每轮累积重复待办
+            cur.execute(
+                "SELECT id FROM captcha_todos WHERE source_id=%s AND detail_url=%s AND status='open' LIMIT 1",
+                (source_id, detail_url),
+            )
+            row = cur.fetchone()
+            if row:
+                return int(row["id"])
             cur.execute(
                 "INSERT INTO captcha_todos (source_id, detail_url, title, status, note) "
                 "VALUES (%s,%s,%s,'open',%s)",

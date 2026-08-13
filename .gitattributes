@@ -1,0 +1,3 @@
+# 换行符规范：shell 脚本与 Docker 相关强制 LF，避免容器内 /bin/sh 因 CRLF 解析失败
+*.sh text eol=lf
+Dockerfile text eol=lf

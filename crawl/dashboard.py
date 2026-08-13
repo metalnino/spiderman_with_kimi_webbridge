@@ -160,7 +160,7 @@ th{{background:#f3f4f6;text-align:left}}
     <label>源站 <select id="fSource"><option value="">全部</option>
       <option value="cebpub">cebpub</option><option value="chinabidding">chinabidding</option>
       <option value="ggzy">ggzy</option><option value="ccgp">ccgp</option>
-      <option value="jsggzy">jsggzy</option></select></label>
+      <option value="jsggzy">jsggzy</option><option value="jiangsu_zhaobiao">jiangsu_zhaobiao</option></select></label>
     <label>省 <select id="fProv"><option value="">全部</option>{prov_opts}</select></label>
     <label>市 <select id="fCity"><option value="">全部</option></select></label>
     <label>仅通过 <input type="checkbox" id="fPass"/></label>

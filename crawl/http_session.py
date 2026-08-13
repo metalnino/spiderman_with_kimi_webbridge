@@ -8,11 +8,24 @@ from http.cookiejar import CookieJar
 from typing import Optional
 
 from crawl.config_loader import anti_bot_cfg
+from crawl import cookie_store
+from crawl.warm_session import WARM_URLS
 
 UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
 )
+
+
+def _http_error_label(e: urllib.error.HTTPError) -> str:
+    code = e.code
+    if code == 429:
+        return "rate_limited(HTTP 429)"
+    if code == 403:
+        return "rate_limited_or_blocked(HTTP 403)"
+    if code == 521:
+        return "origin_down(HTTP 521)"
+    return f"HTTP {code}"
 
 
 class HttpSession:
@@ -29,6 +42,17 @@ class HttpSession:
         self.retries = int(http.get("retries") or 2)
         self.delay_min = int(per.get("delay_ms_min") or http.get("delay_ms_min") or 800) / 1000
         self.delay_max = int(per.get("delay_ms_max") or http.get("delay_ms_max") or 2200) / 1000
+        self._cookie_header: str | None = None
+        if source_id:
+            self.load_stored_cookies(source_id)
+
+    def load_stored_cookies(self, source_id: str) -> int:
+        hdr = cookie_store.cookie_header(source_id)
+        if not hdr:
+            return 0
+        self._cookie_header = hdr
+        url = WARM_URLS.get(source_id) or "https://example.com/"
+        return cookie_store.apply_to_jar(self.cj, hdr, url)
 
     def sleep(self):
         time.sleep(random.uniform(self.delay_min, self.delay_max))
@@ -42,9 +66,11 @@ class HttpSession:
         method: str | None = None,
     ) -> tuple[int, bytes, str]:
         hdrs = {"User-Agent": UA, "Accept": "*/*"}
+        if self._cookie_header and "Cookie" not in (headers or {}):
+            hdrs["Cookie"] = self._cookie_header
         if headers:
             hdrs.update(headers)
-        last: Exception | None = None
+        last: str | None = None
         for i in range(self.retries):
             try:
                 req = urllib.request.Request(
@@ -57,8 +83,14 @@ class HttpSession:
                     raw = resp.read()
                     final = resp.geturl()
                     return resp.status, raw, final
+            except urllib.error.HTTPError as e:
+                last = _http_error_label(e)
+                # 4xx 客户端错误通常重试无益；立即失败，交由上层按状态归类
+                if 400 <= e.code < 500:
+                    break
+                time.sleep(0.5 * (i + 1))
             except Exception as e:  # noqa: BLE001
-                last = e
+                last = str(e) or type(e).__name__
                 time.sleep(0.5 * (i + 1))
         raise RuntimeError(f"http failed: {url} ({last})")
 

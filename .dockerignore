@@ -1,0 +1,17 @@
+.git
+.venv
+venv
+__pycache__
+*.pyc
+.env
+.env.local
+data/trial/
+data/trial_multi/
+data/crm/
+data/chinabidding/
+data/multi_site/
+data/data/
+data/sessions/
+*.log
+.cursor/
+agent-transcripts/

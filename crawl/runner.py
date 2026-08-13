@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import os
+
 from crawl.captcha_queue import open_todo
-from crawl.config_loader import sources_cfg
+from crawl.config_loader import anti_bot_cfg, sources_cfg
 from crawl.db_store import finish_run, start_run, upsert_notices
 from crawl.keywords import enabled_keywords
 from crawl.pipeline.apply_clean import refresh_clean_status
@@ -9,9 +11,23 @@ from crawl.sources import get_source
 from crawl.warm_session import warm_source
 
 
+def _max_keywords_per_run() -> int:
+    """每站每轮最多爬几个词；0=不限（默认）。SPIDER_MAX_KEYWORDS 或 anti_bot.http.max_keywords_per_run 覆盖。"""
+    v = os.environ.get("SPIDER_MAX_KEYWORDS")
+    if v:
+        try:
+            return max(0, int(v))
+        except ValueError:
+            pass
+    ab = anti_bot_cfg()
+    return int(((ab.get("http") or {}).get("max_keywords_per_run")) or 0)
+
+
 def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: int = 1) -> dict:
     kws = keywords or enabled_keywords()
-    kws = kws[:2]
+    limit = _max_keywords_per_run()
+    if limit and len(kws) > limit:
+        kws = kws[:limit]
     src = get_source(source_id)
     warm_info = warm_source(source_id, src.http)
     run_id = start_run(source_id)
@@ -58,7 +74,7 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
 
 def run_incremental(*, sources: list[str] | None = None, max_pages: int = 1) -> list[dict]:
     cfg = sources_cfg()
-    order = sources or ["ggzy", "chinabidding", "cebpub", "ccgp", "jsggzy"]
+    order = sources or ["ggzy", "chinabidding", "cebpub", "ccgp", "jsggzy", "jiangsu_zhaobiao"]
     results = []
     for sid in order:
         sc = cfg.get(sid) or {}

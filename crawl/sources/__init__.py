@@ -3,6 +3,7 @@ from crawl.sources.chinabidding import ChinabiddingSource
 from crawl.sources.ccgp import CcgpSource
 from crawl.sources.ggzy import GgzySource
 from crawl.sources.jsggzy import JsggzySource
+from crawl.sources.jiangsu_zhaobiao import JiangsuZhaobiaoSource
 
 REGISTRY = {
     "cebpub": CebpubSource,
@@ -10,6 +11,7 @@ REGISTRY = {
     "ggzy": GgzySource,
     "ccgp": CcgpSource,
     "jsggzy": JsggzySource,
+    "jiangsu_zhaobiao": JiangsuZhaobiaoSource,
 }
 
 
