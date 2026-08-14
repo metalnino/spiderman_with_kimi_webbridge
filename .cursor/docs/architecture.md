@@ -11,6 +11,7 @@
 
 ```
 sources/*     每站适配器（列表/详情能力不同）
+detail        详情字段回填（ccgp HTTP 已接入；ggzy/cebpub/jiangsu/chinabidding 待接入）
 core/http     HTTP、限速、Cookie 会话
 core/webbridge 暖会话、验证码人工、频控兜底
 pipeline      标准化 → 去重 → 清洗钩子 → 写库

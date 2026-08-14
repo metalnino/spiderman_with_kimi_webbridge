@@ -327,6 +327,26 @@ class TestDBOps(unittest.TestCase):
         self.assertIn("验证码待办", text)
 
 
+class TestDetail(unittest.TestCase):
+    def test_parse_ccgp_detail(self):
+        from crawl.detail import parse_ccgp_detail
+
+        html = (
+            "<html><body>"
+            "<div>项目编号：330703260040030000035-YG2026-FW8350-ZFCG017-5</div>"
+            "<div>采购单位 金华市金东区机关物业管理中心</div>"
+            "<div>代理机构名称 浙江金华阳光招标代理有限公司</div>"
+            "<div>总中标金额 ￥33.146000 万元（人民币）</div>"
+            "</body></html>"
+        )
+        d = parse_ccgp_detail(html)
+        self.assertEqual(d.get("project_code"), "330703260040030000035-YG2026-FW8350-ZFCG017-5")
+        self.assertEqual(d.get("buyer"), "金华市金东区机关物业管理中心")
+        self.assertEqual(d.get("agency"), "浙江金华阳光招标代理有限公司")
+        self.assertAlmostEqual(d.get("amount"), 331460.0, places=0)
+        self.assertIn("33.146000 万元", d.get("amount_text") or "")
+
+
 class TestEntry(unittest.TestCase):
     def test_run_incremental_entry_imports(self):
         """主增量入口 import 链必须可用（曾因 build_incremental_html 拼错而崩）。"""

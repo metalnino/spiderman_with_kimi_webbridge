@@ -7,6 +7,7 @@ from crawl.config_loader import anti_bot_cfg, sources_cfg
 from crawl.db_store import finish_run, start_run, upsert_notices
 from crawl.keywords import enabled_keywords
 from crawl.pipeline.apply_clean import refresh_clean_status
+from crawl.detail import enrich_source_details
 from crawl.sources import get_source
 from crawl.warm_session import warm_source
 
@@ -23,6 +24,17 @@ def _max_keywords_per_run() -> int:
     return int(((ab.get("http") or {}).get("max_keywords_per_run")) or 0)
 
 
+def _max_detail_per_run() -> int:
+    """每站每轮最多回填几条详情；0=关闭。SPIDER_MAX_DETAIL 覆盖。"""
+    v = os.environ.get("SPIDER_MAX_DETAIL")
+    if v:
+        try:
+            return max(0, int(v))
+        except ValueError:
+            pass
+    return 5
+
+
 def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: int = 1) -> dict:
     kws = keywords or enabled_keywords()
     limit = _max_keywords_per_run()
@@ -35,6 +47,7 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
         notices = list(src.fetch(kws, max_pages=max_pages))
         stats = upsert_notices(notices)
         clean_stats = refresh_clean_status(limit=max(200, stats["attempted"] * 3))
+        detail_stats = enrich_source_details(source_id, limit=_max_detail_per_run())
         # cebpub 详情验证码：为样本登记待办（不阻塞列表）
         if source_id == "cebpub":
             for n in notices[:3]:
@@ -44,7 +57,7 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
             run_id,
             status="success",
             item_count=stats["attempted"],
-            note=f"upsert≈{stats['affected']} clean={clean_stats} warm={warm_info.get('warmed')} kw={kws}",
+            note=f"upsert≈{stats['affected']} clean={clean_stats} detail={detail_stats} warm={warm_info.get('warmed')} kw={kws}",
         )
         return {
             "source_id": source_id,
@@ -52,6 +65,7 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
             "status": "success",
             "keywords": kws,
             "clean": clean_stats,
+            "detail": detail_stats,
             "warm": warm_info,
             **stats,
         }

@@ -13,3 +13,4 @@
 | 2026-08-09 | NAS Docker：爬虫+台账容器（MySQL 沿用）；compose 暴露 8765 |
 | 2026-08-11 | 接入江苏招标网 jiangsu_zhaobiao（账号登录可选+滑块人工；列表 Dqsearch） |
 | 2026-08-14 | 修复主入口 ImportError（build_incremental_html→list）；网络测试 SPIDER_LIVE_TESTS=1 门控；http 4xx/5xx/网络错误分类；关键词上限可配(默认不限)；验证码待办去重；6 站配置/看板同步；补根 README；unittest 26/26 |
+| 2026-08-14 | 详情字段抓取起步：crawl/detail.py 新增 ccgp 详情 HTTP 解析（金额/招标人/代理/项目编号）并接入 runner 回填；探针确认 ggzy=JS壳、jiangsu=Cloudflare、cebpub=验证码、chinabidding=登录墙（待接入）；unittest 27/27 |

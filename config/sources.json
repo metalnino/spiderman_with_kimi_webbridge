@@ -12,7 +12,7 @@
     "name": "中国政府采购网",
     "list_url": "https://search.ccgp.gov.cn/bxsearch",
     "time_type": "5",
-    "fetch_detail": false,
+    "detail": "http",
     "rate_limit_note": "易频繁访问；失败记 crawl_runs"
   },
   "ggzy": {
