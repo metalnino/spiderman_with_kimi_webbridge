@@ -9,15 +9,17 @@ import os
 import sys
 from pathlib import Path
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, JSONResponse
+from fastapi import Body, FastAPI
+from fastapi.responses import FileResponse, JSONResponse, Response
 from pydantic import BaseModel
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from crawl import ledger_data as data  # noqa: E402
+from crawl.actions import trigger_crawl, update_notice_lead  # noqa: E402
 from crawl.captcha_flow import open_for_human, resolve_todo  # noqa: E402
+from crawl.keywords import add_keyword, delete_keyword, set_keyword_enabled, sync_config_keywords  # noqa: E402
 
 SHELL = ROOT / "data" / "web" / "ledger_app.html"
 DEFAULT_HOST = "127.0.0.1"
@@ -75,6 +77,10 @@ def notices(
     clean_status: str | None = None,
     only_pass: bool = False,
     q: str | None = None,
+    lead_status: str | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
+    sort: str = "created",
     limit: int = 50,
     offset: int = 0,
 ):
@@ -85,9 +91,81 @@ def notices(
         clean_status=clean_status,
         only_pass=only_pass,
         q=q,
+        lead_status=lead_status,
+        amount_min=amount_min,
+        amount_max=amount_max,
+        sort=sort,
         limit=limit,
         offset=offset,
     )
+
+
+@app.get("/api/notices/export")
+def notices_export(
+    source_id: str | None = None,
+    province: str | None = None,
+    city: str | None = None,
+    clean_status: str | None = None,
+    only_pass: bool = False,
+    q: str | None = None,
+    lead_status: str | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
+    sort: str = "created",
+):
+    csv_text = data.export_csv(
+        source_id=source_id, province=province, city=city, clean_status=clean_status,
+        only_pass=only_pass, q=q, lead_status=lead_status,
+        amount_min=amount_min, amount_max=amount_max, sort=sort,
+    )
+    return Response(
+        content=csv_text.encode("utf-8"),
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": "attachment; filename=notices.csv"},
+    )
+
+
+@app.post("/api/notices/{notice_id}/lead")
+def notice_lead(notice_id: int, payload: dict = Body(default={})):
+    out = update_notice_lead(
+        notice_id,
+        read=bool(payload.get("read")),
+        lead_status=payload.get("lead_status"),
+        amount_status=payload.get("amount_status"),
+        remark=payload.get("remark"),
+    )
+    return JSONResponse(status_code=200 if out.get("ok") else 400, content=out)
+
+
+@app.post("/api/crawl/run")
+def crawl_run(payload: dict = Body(default={})):
+    try:
+        pages = int(payload.get("pages") or 1)
+    except (TypeError, ValueError):
+        pages = 1
+    sources = payload.get("sources")
+    if isinstance(sources, str):
+        sources = [s for s in sources.split(",") if s]
+    out = trigger_crawl(pages=pages, sources=sources or None)
+    return JSONResponse(status_code=200 if out.get("ok") else 400, content=out)
+
+
+@app.post("/api/keywords")
+def keyword_add(payload: dict = Body(default={})):
+    return add_keyword(payload.get("keyword") or "")
+
+
+@app.post("/api/keywords/{kw}/toggle")
+def keyword_toggle(kw: str, payload: dict = Body(default={})):
+    enabled = bool(payload.get("enabled", True))
+    set_keyword_enabled(kw, enabled)
+    sync_config_keywords()
+    return {"ok": True, "keyword": kw, "enabled": enabled}
+
+
+@app.delete("/api/keywords/{kw}")
+def keyword_delete(kw: str):
+    return delete_keyword(kw)
 
 
 @app.get("/api/runs")

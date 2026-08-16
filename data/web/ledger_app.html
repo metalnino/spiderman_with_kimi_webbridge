@@ -7,58 +7,72 @@
 body{font-family:Microsoft YaHei,Segoe UI,sans-serif;margin:0;background:#f5f6f8;color:#1f2329}
 header{background:#111827;color:#fff;padding:16px 24px}
 nav{display:flex;gap:8px;padding:12px 24px;background:#fff;border-bottom:1px solid #e5e7eb;flex-wrap:wrap}
-nav button{border:1px solid #d1d5db;background:#fff;padding:8px 12px;cursor:pointer}
+nav button{border:1px solid #d1d5db;background:#fff;padding:8px 12px;cursor:pointer;border-radius:4px}
 nav button.active{background:#111827;color:#fff;border-color:#111827}
 section{display:none;padding:20px 24px}
 section.active{display:block}
 table{border-collapse:collapse;width:100%;background:#fff}
-th,td{border:1px solid #e5e7eb;padding:8px;font-size:13px;vertical-align:top}
-th{background:#f3f4f6;text-align:left}
+th,td{border:1px solid #e5e7eb;padding:6px 8px;font-size:13px;vertical-align:top}
+th{background:#f3f4f6;text-align:left;position:sticky;top:0}
 .filters{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:center}
 .hint{color:#6b7280;font-size:12px}
 .cards{display:flex;gap:12px;flex-wrap:wrap}
-.card{background:#fff;border:1px solid #e5e7eb;padding:12px 16px;min-width:140px}
-.error{color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;padding:8px 12px;margin:12px 24px}
+.card{background:#fff;border:1px solid #e5e7eb;padding:12px 16px;min-width:140px;border-radius:6px}
+.error{color:#b91c1c;background:#fef2f2;border:1px solid #fecaca;padding:8px 12px;margin:12px 24px;border-radius:6px}
 .pager{display:flex;gap:8px;align-items:center;margin-top:10px}
-button.secondary{border:1px solid #d1d5db;background:#fff;padding:6px 10px;cursor:pointer}
-input[type=text]{padding:6px 8px;border:1px solid #d1d5db}
+button.secondary{border:1px solid #d1d5db;background:#fff;padding:6px 10px;cursor:pointer;border-radius:4px}
+button.secondary:hover{background:#f3f4f6}
+button.primary{background:#111827;color:#fff;border:1px solid #111827;padding:6px 12px;cursor:pointer;border-radius:4px}
+input[type=text],input[type=number],select{padding:6px 8px;border:1px solid #d1d5db;border-radius:4px;font-size:13px}
+mark{background:#fde68a;padding:0 2px;border-radius:2px}
+select.lead-sel{border:none;background:#f3f4f6;font-size:12px;padding:2px 4px;border-radius:4px;cursor:pointer}
+input.remark{font-size:12px;padding:2px 4px;border:1px solid transparent;width:110px}
+input.remark:focus{border-color:#d1d5db;background:#fff}
+.unread{font-weight:650;color:#111827}
+.read{color:#9ca3af}
+.tag{display:inline-block;background:#eef2ff;color:#4338ca;border-radius:4px;padding:0 4px;font-size:11px;margin:1px}
+a{color:#2563eb;text-decoration:none}
+a:hover{text-decoration:underline}
 </style>
 </head>
 <body>
-<header>
-  <h1>绿植招采运营台</h1>
-  <div class="hint" id="hdrHint">加载中…</div>
-</header>
+<header><h1>绿植招采运营台</h1><div class="hint" id="hdrHint">加载中…</div></header>
 <div id="errBox" class="error" style="display:none"></div>
 <nav>
   <button class="active" data-tab="monitor">运行监控</button>
-  <button data-tab="incr">信息获取</button>
+  <button data-tab="leads">线索工作台</button>
   <button data-tab="clean">清洗质量</button>
-  <button data-tab="work">线索工作台</button>
   <button data-tab="kw">词库</button>
   <button data-tab="captcha">验证码待办</button>
   <button data-tab="crm">CRM主体</button>
 </nav>
 
 <section id="monitor" class="active">
-  <h2>运行监控</h2>
+  <div style="margin-bottom:12px"><button class="primary" id="crawlNow">▶ 立即爬取一次</button> <span class="hint" id="crawlMsg"></span></div>
   <div class="cards" id="sumCards"></div>
   <h3>最近任务</h3>
   <table><thead><tr><th>ID</th><th>源站</th><th>状态</th><th>条数</th><th>开始</th><th>备注</th></tr></thead>
   <tbody id="runBody"></tbody></table>
 </section>
 
-<section id="incr">
-  <h2>信息获取（增量）</h2>
-  <p class="hint">NEW = 首次发现 48 小时内；数据来自本机只读 API</p>
+<section id="leads">
+  <h2>线索工作台</h2>
   <div class="filters">
-    <label>源站 <select id="iSource"><option value="">全部</option></select></label>
-    <label>关键词 <input type="text" id="iQ" placeholder="标题包含" /></label>
-    <button class="secondary" id="iSearch">查询</button>
+    <label>源站 <select id="lSource"><option value="">全部</option></select></label>
+    <label>省 <select id="lProv"><option value="">全部</option></select></label>
+    <label>市 <select id="lCity"><option value="">全部</option></select></label>
+    <label>处理状态 <select id="lLead"><option value="">全部</option><option>待处理</option><option>跟进中</option><option>已成交</option><option>已放弃</option><option>忽略</option></select></label>
+    <label>金额 <input type="number" id="lAmtMin" placeholder="最小(元)" style="width:90px"/> - <input type="number" id="lAmtMax" placeholder="最大(元)" style="width:90px"/></label>
+    <label>标题 <input type="text" id="lQ" placeholder="关键词"/></label>
+    <label>排序 <select id="lSort"><option value="created">按发现时间</option><option value="amount">按金额</option><option value="publish">按发布时间</option></select></label>
+    <label><input type="checkbox" id="lPass"/> 仅通过</label>
+    <button class="primary" id="lSearch">查询</button>
+    <button class="secondary" id="lExport">导出CSV</button>
   </div>
-  <table><thead><tr><th>NEW</th><th>源站</th><th>城市</th><th>词</th><th>清洗</th><th>人工</th><th>标题</th><th>发现时间</th><th>链接</th></tr></thead>
-  <tbody id="noticeBody"></tbody></table>
-  <div class="pager"><button class="secondary" id="iPrev">上一页</button><span id="iPage" class="hint"></span><button class="secondary" id="iNext">下一页</button></div>
+  <table><thead><tr>
+    <th>已读</th><th>NEW</th><th>源站</th><th>城市</th><th>处理状态</th><th>金额</th><th>金额确认</th><th>标题 / 招标人</th><th>发现时间</th><th>备注</th>
+  </tr></thead><tbody id="leadBody"></tbody></table>
+  <div class="pager"><button class="secondary" id="lPrev">上一页</button><span id="lPage" class="hint"></span><button class="secondary" id="lNext">下一页</button></div>
 </section>
 
 <section id="clean">
@@ -67,166 +81,189 @@ input[type=text]{padding:6px 8px;border:1px solid #d1d5db}
   <div class="card"><b>丢弃原因 Top</b><ul id="cleanDrop"></ul></div></div>
 </section>
 
-<section id="work">
-  <h2>线索工作台（级联筛选）</h2>
-  <div class="filters">
-    <label>源站 <select id="fSource"><option value="">全部</option></select></label>
-    <label>省 <select id="fProv"><option value="">全部</option></select></label>
-    <label>市 <select id="fCity"><option value="">全部</option></select></label>
-    <label>仅通过 <input type="checkbox" id="fPass"/></label>
-    <button class="secondary" id="fGo">筛选</button>
-  </div>
-  <p class="hint" id="capHint"></p>
-  <table><thead><tr><th>源站</th><th>城市</th><th>清洗</th><th>标题</th><th>链接</th></tr></thead>
-  <tbody id="workBody"></tbody></table>
-  <div class="pager"><span id="wPage" class="hint"></span></div>
-</section>
-
 <section id="kw">
-  <h2>词库</h2>
-  <table><thead><tr><th>关键词</th><th>状态</th><th>分组</th></tr></thead><tbody id="kwBody"></tbody></table>
+  <h2>词库（页面可改，改动落库并回写配置）</h2>
+  <div class="filters">
+    <input type="text" id="kwNew" placeholder="新增关键词" style="width:180px"/>
+    <button class="primary" id="kwAdd">新增</button>
+    <span class="hint" id="kwMsg"></span>
+  </div>
+  <table><thead><tr><th>关键词</th><th>状态</th><th>分组</th><th>操作</th></tr></thead><tbody id="kwBody"></tbody></table>
 </section>
 
 <section id="captcha">
   <h2>验证码待办（本机同事划）</h2>
-  <p class="hint">流程：点「打开」→ 浏览器里划/输验证码 → 点「已解决」（自动尽量导出 Cookie）。也可命令行：python scripts/jobs/solve_captcha.py</p>
+  <p class="hint">流程：点「打开」→ 浏览器里划/输验证码 → 点「已解决」。</p>
   <p class="hint" id="capMsg"></p>
   <table><thead><tr><th>ID</th><th>源站</th><th>状态</th><th>标题</th><th>Cookie</th><th>操作</th></tr></thead>
   <tbody id="capBody"></tbody></table>
 </section>
 
 <section id="crm">
-  <h2>CRM 主体</h2>
-  <table><thead><tr><th>名称</th><th>类型</th><th>城市</th><th>公告数</th><th>最近</th></tr></thead>
+  <h2>CRM 主体（规范化去重 / 全国同名合并）</h2>
+  <table><thead><tr><th>名称</th><th>类型</th><th>主城</th><th>业务</th><th>公告数</th><th>最近</th></tr></thead>
   <tbody id="crmBody"></tbody></table>
 </section>
 
 <script>
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 let META = {province_city:{}, sources:[], hints:{}};
-let iOffset = 0;
+let lOffset = 0;
 const PAGE = 50;
 
 async function api(path) {
   const r = await fetch(path, {cache:'no-store'});
   const j = await r.json();
-  if (!r.ok) throw new Error(j.error || ('HTTP '+r.status));
+  if (!r.ok) throw new Error(j.error || j.detail || ('HTTP '+r.status));
   return j;
 }
-
+async function postJSON(path, body) {
+  const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok && !j.ok) throw new Error(j.error || j.detail || ('HTTP '+r.status));
+  return j;
+}
+async function del(path) {
+  const r = await fetch(path, {method:'DELETE'});
+  const j = await r.json();
+  if (!r.ok && !j.ok) throw new Error(j.error || j.detail || ('HTTP '+r.status));
+  return j;
+}
 function showErr(e) {
   const box = document.getElementById('errBox');
   box.style.display = 'block';
-  box.textContent = 'API 错误: ' + (e && e.message ? e.message : e) + '（请用 python scripts/jobs/serve_ledger.py 启动本机服务）';
+  box.textContent = 'API 错误: ' + (e && e.message ? e.message : e) + '（请确认 python scripts/jobs/serve_ledger.py 已启动）';
 }
-
-function fillSources(sel) {
-  sel.innerHTML = '<option value="">全部</option>' + META.sources.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+function fillSelect(sel, arr) {
+  sel.innerHTML = '<option value="">全部</option>' + arr.map(s => '<option value="'+esc(s)+'">'+esc(s)+'</option>').join('');
+}
+function fmtAmount(r) {
+  if (r.amount_text) return esc(r.amount_text);
+  if (r.amount != null) {
+    const a = Number(r.amount);
+    if (a >= 10000) return (a/10000).toFixed(2) + '万';
+    return a + '元';
+  }
+  return '-';
+}
+function hlTitle(title, kw) {
+  if (!kw || !title) return esc(title);
+  const i = title.indexOf(kw);
+  if (i < 0) return esc(title);
+  return esc(title.slice(0,i)) + '<mark>'+esc(kw)+'</mark>' + esc(title.slice(i+kw.length));
 }
 
 async function loadMonitor() {
   const [sum, runs] = await Promise.all([api('/api/summary'), api('/api/runs?limit=40')]);
   document.getElementById('hdrHint').textContent =
-    `${sum.generated_at} · 公告 ${sum.notice_total} · NEW(48h) ${sum.recent_new} · 任务 ${sum.run_total} · 只读API`;
+    sum.generated_at+' · 公告 '+sum.notice_total+' · NEW(48h) '+sum.recent_new+' · 任务 '+sum.run_total;
   document.getElementById('sumCards').innerHTML = [
-    ['公告总数', sum.notice_total],
-    ['近48h新增', sum.recent_new],
-    ['任务数', sum.run_total],
-    ['CRM主体', sum.entity_total],
-    ['验证码待办', sum.open_captcha],
-  ].map(([k,v]) => `<div class="card"><div class="hint">${esc(k)}</div><b>${esc(v)}</b></div>`).join('');
+    ['公告总数', sum.notice_total],['近48h新增', sum.recent_new],['任务数', sum.run_total],
+    ['CRM主体', sum.entity_total],['验证码待办', sum.open_captcha],
+  ].map(([k,v]) => '<div class="card"><div class="hint">'+esc(k)+'</div><b>'+esc(v)+'</b></div>').join('');
   document.getElementById('runBody').innerHTML = (runs.items||[]).map(r =>
-    `<tr><td>${esc(r.id)}</td><td>${esc(r.source_id)}</td><td>${esc(r.status)}</td><td>${esc(r.item_count)}</td><td>${esc(r.started_at)}</td><td>${esc((r.note||'').slice(0,100))}</td></tr>`
+    '<tr><td>'+esc(r.id)+'</td><td>'+esc(r.source_id)+'</td><td>'+esc(r.status)+'</td><td>'+esc(r.item_count)+'</td><td>'+esc(r.started_at)+'</td><td>'+esc((r.note||'').slice(0,80))+'</td></tr>'
   ).join('') || '<tr><td colspan=6>暂无</td></tr>';
 }
 
-async function loadNotices() {
-  const sid = document.getElementById('iSource').value;
-  const q = document.getElementById('iQ').value.trim();
-  const qs = new URLSearchParams({limit:String(PAGE), offset:String(iOffset)});
-  if (sid) qs.set('source_id', sid);
+const LEAD_STATUSES = ['待处理','跟进中','已成交','已放弃','忽略'];
+const AMOUNT_STATUSES = ['待确认','已确认','无金额'];
+
+function leadSelect(cur, opts, cls, dataId, act) {
+  let h = '<select class="'+cls+'" data-id="'+dataId+'" data-act="'+act+'">';
+  if (opts.indexOf(cur) < 0) h += '<option value="'+esc(cur||'')+'" selected>'+esc(cur||'')+'</option>';
+  for (const o of opts) h += '<option value="'+esc(o)+'"'+(o===cur?' selected':'')+'>'+esc(o)+'</option>';
+  return h + '</select>';
+}
+
+async function loadLeads() {
+  const qs = new URLSearchParams({limit:String(PAGE), offset:String(lOffset)});
+  const src=document.getElementById('lSource').value, prov=document.getElementById('lProv').value,
+        city=document.getElementById('lCity').value, lead=document.getElementById('lLead').value,
+        amn=document.getElementById('lAmtMin').value, amx=document.getElementById('lAmtMax').value,
+        q=document.getElementById('lQ').value.trim(), sort=document.getElementById('lSort').value,
+        pass=document.getElementById('lPass').checked;
+  if (src) qs.set('source_id', src);
+  if (prov) qs.set('province', prov);
+  if (city) qs.set('city', city);
+  if (lead) qs.set('lead_status', lead);
+  if (amn) qs.set('amount_min', amn);
+  if (amx) qs.set('amount_max', amx);
   if (q) qs.set('q', q);
-  const data = await api('/api/notices?' + qs.toString());
-  document.getElementById('noticeBody').innerHTML = (data.items||[]).map(r => {
-    const link = r.detail_url ? `<a href="${esc(r.detail_url)}" target="_blank">链接</a>` : '-';
-    const hint = r.capability_hint ? `<br><small>${esc(r.capability_hint)}</small>` : '';
-    return `<tr><td>${r.is_new?'NEW':''}</td><td>${esc(r.source_id)}</td><td>${esc(r.city||'-')}</td><td>${esc(r.keyword||'-')}</td><td>${esc(r.clean_status||'-')}<br><small>${esc(r.clean_reason||'')}</small></td><td>${esc(r.manual_label||'-')}</td><td>${esc((r.title||'').slice(0,120))}${hint}</td><td>${esc(r.created_at)}</td><td>${link}</td></tr>`;
-  }).join('') || '<tr><td colspan=9>暂无</td></tr>';
-  document.getElementById('iPage').textContent = `共 ${data.total} · offset ${data.offset}`;
-  document.getElementById('iPrev').disabled = iOffset <= 0;
-  document.getElementById('iNext').disabled = iOffset + PAGE >= data.total;
+  qs.set('sort', sort);
+  if (pass) qs.set('only_pass','1');
+  const d = await api('/api/notices?'+qs.toString());
+  document.getElementById('leadBody').innerHTML = (d.items||[]).map(r => {
+    const readCls = r.read_at ? 'read' : 'unread';
+    const readBtn = '<button class="secondary" data-id="'+r.id+'" data-act="read" style="font-size:11px;padding:2px 6px">'+(r.read_at?'已读':'标已读')+'</button>';
+    const links = [];
+    if (r.detail_url) links.push('<a href="'+esc(r.detail_url)+'" target="_blank">详情</a>');
+    if (r.official_url && r.official_url !== r.detail_url) links.push('<a href="'+esc(r.official_url)+'" target="_blank">原文</a>');
+    const buyer = r.buyer ? '<br><small class="hint">招标人：'+esc(r.buyer)+'</small>' : '';
+    return '<tr class="'+readCls+'">'
+      + '<td>'+readBtn+'</td>'
+      + '<td>'+(r.is_new?'NEW':'')+'</td>'
+      + '<td>'+esc(r.source_id)+'</td>'
+      + '<td>'+esc(r.city||'-')+'</td>'
+      + '<td>'+leadSelect(r.lead_status||'待处理', LEAD_STATUSES, 'lead-sel', r.id, 'lead')+'</td>'
+      + '<td>'+fmtAmount(r)+'</td>'
+      + '<td>'+leadSelect(r.amount_status||(r.amount!=null?'待确认':'无金额'), AMOUNT_STATUSES, 'lead-sel', r.id, 'amount')+'</td>'
+      + '<td>'+hlTitle(r.title, r.keyword)+buyer+' <br><small class="hint">'+links.join(' · ')+'</small></td>'
+      + '<td>'+esc(r.created_at)+'</td>'
+      + '<td><input class="remark" data-id="'+r.id+'" data-act="remark" value="'+esc(r.remark||'')+'" placeholder="备注"/></td>'
+      + '</tr>';
+  }).join('') || '<tr><td colspan=10>暂无数据</td></tr>';
+  document.getElementById('lPage').textContent = '共 '+d.total+' · offset '+d.offset;
+  document.getElementById('lPrev').disabled = lOffset <= 0;
+  document.getElementById('lNext').disabled = lOffset + PAGE >= d.total;
 }
 
 async function loadClean() {
   const s = await api('/api/clean/stats');
-  document.getElementById('cleanDec').innerHTML = (s.decisions_7d||[]).map(x => `<li>${esc(x.decision)}: ${esc(x.c)}</li>`).join('') || '<li>暂无</li>';
-  document.getElementById('cleanDrop').innerHTML = (s.drop_reasons||[]).map(x => `<li>${esc(x.reason||'-')}: ${esc(x.c)}</li>`).join('') || '<li>暂无</li>';
-}
-
-function refillCities() {
-  const p = document.getElementById('fProv').value;
-  const city = document.getElementById('fCity');
-  const keep = city.value;
-  const list = META.province_city[p] || [];
-  city.innerHTML = '<option value="">全部</option>' + list.map(c => `<option value="${esc(c)}">${esc(c)}</option>`).join('');
-  if (list.includes(keep)) city.value = keep;
-}
-
-async function loadWork() {
-  const sid = document.getElementById('fSource').value;
-  const p = document.getElementById('fProv').value;
-  const c = document.getElementById('fCity').value;
-  const only = document.getElementById('fPass').checked;
-  const qs = new URLSearchParams({limit:'100', offset:'0'});
-  if (sid) qs.set('source_id', sid);
-  if (p) qs.set('province', p);
-  if (c) qs.set('city', c);
-  if (only) qs.set('only_pass', '1');
-  document.getElementById('capHint').textContent = (META.hints && META.hints[sid]) || '';
-  const data = await api('/api/notices?' + qs.toString());
-  document.getElementById('workBody').innerHTML = (data.items||[]).map(r => {
-    const link = r.detail_url ? `<a href="${esc(r.detail_url)}" target="_blank">链接</a>` : '-';
-    return `<tr><td>${esc(r.source_id)}</td><td>${esc(r.city||'-')}</td><td>${esc(r.clean_status||'-')}</td><td>${esc((r.title||'').slice(0,100))}</td><td>${link}</td></tr>`;
-  }).join('') || '<tr><td colspan=5>无匹配</td></tr>';
-  document.getElementById('wPage').textContent = `匹配 ${data.total}（显示前 ${data.items.length}）`;
+  document.getElementById('cleanDec').innerHTML = (s.decisions_7d||[]).map(x => '<li>'+esc(x.decision)+': '+esc(x.c)+'</li>').join('') || '<li>暂无</li>';
+  document.getElementById('cleanDrop').innerHTML = (s.drop_reasons||[]).map(x => '<li>'+esc(x.reason||'-')+': '+esc(x.c)+'</li>').join('') || '<li>暂无</li>';
 }
 
 async function loadKw() {
   const d = await api('/api/keywords');
   document.getElementById('kwBody').innerHTML = (d.items||[]).map(k =>
-    `<tr><td>${esc(k.keyword)}</td><td>${k.enabled?'启用':'停用'}</td><td>${esc(k.group_name||'-')}</td></tr>`
-  ).join('') || '<tr><td colspan=3>请先 seed</td></tr>';
-}
-
-async function postCaptcha(path, body) {
-  const r = await fetch(path, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body)});
-  const j = await r.json();
-  if (!r.ok && !j.ok) throw new Error(j.error || ('HTTP '+r.status));
-  return j;
+    '<tr><td>'+esc(k.keyword)+'</td><td>'+(k.enabled?'<b style="color:#0d7a3f">启用</b>':'<span class="hint">停用</span>')+'</td><td>'+esc(k.group_name||'-')+'</td>'
+    + '<td><button class="secondary" data-kw="'+esc(k.keyword)+'" data-act="toggle">'+(k.enabled?'停用':'启用')+'</button> '
+    + '<button class="secondary" data-kw="'+esc(k.keyword)+'" data-act="del" style="color:#b91c1c">删除</button></td></tr>'
+  ).join('') || '<tr><td colspan=4>请先 seed</td></tr>';
+  document.getElementById('kwBody').onclick = async (ev) => {
+    const btn = ev.target.closest('button[data-kw]');
+    if (!btn) return;
+    const kw = btn.dataset.kw, msg = document.getElementById('kwMsg');
+    try {
+      if (btn.dataset.act === 'toggle') {
+        const cur = btn.textContent.trim() === '停用';
+        await postJSON('/api/keywords/'+encodeURIComponent(kw)+'/toggle', {enabled: !cur});
+      } else {
+        await del('/api/keywords/'+encodeURIComponent(kw));
+      }
+      msg.textContent = '已更新';
+      await loadKw();
+    } catch (e) { showErr(e); }
+  };
 }
 
 async function loadCaptcha() {
   const d = await api('/api/captcha?limit=40');
   document.getElementById('capBody').innerHTML = (d.items||[]).map(t => {
-    const openBtn = t.status==='open' ? `<button class="secondary" data-act="open" data-id="${t.id}">打开</button>` : '';
-    const doneBtn = t.status==='open' ? `<button class="secondary" data-act="done" data-id="${t.id}">已解决</button>` : '';
-    const link = t.detail_url ? `<a href="${esc(t.detail_url)}" target="_blank">链接</a>` : '';
-    const ck = t.has_saved_cookie ? `有(${esc(t.cookie_saved_at||'')})` : '无';
-    return `<tr><td>${esc(t.id)}</td><td>${esc(t.source_id)}</td><td>${esc(t.status)}</td><td>${esc((t.title||'').slice(0,80))} ${link}</td><td>${ck}</td><td>${openBtn} ${doneBtn}</td></tr>`;
+    const openBtn = t.status==='open' ? '<button class="secondary" data-act="open" data-id="'+t.id+'">打开</button>' : '';
+    const doneBtn = t.status==='open' ? '<button class="secondary" data-act="done" data-id="'+t.id+'">已解决</button>' : '';
+    const link = t.detail_url ? '<a href="'+esc(t.detail_url)+'" target="_blank">链接</a>' : '';
+    const ck = t.has_saved_cookie ? '有('+esc(t.cookie_saved_at||'')+')' : '无';
+    return '<tr><td>'+esc(t.id)+'</td><td>'+esc(t.source_id)+'</td><td>'+esc(t.status)+'</td><td>'+esc((t.title||'').slice(0,80))+' '+link+'</td><td>'+ck+'</td><td>'+openBtn+' '+doneBtn+'</td></tr>';
   }).join('') || '<tr><td colspan=6>暂无</td></tr>';
   document.getElementById('capBody').onclick = async (ev) => {
     const btn = ev.target.closest('button[data-act]');
     if (!btn) return;
-    const id = Number(btn.dataset.id);
-    const msg = document.getElementById('capMsg');
+    const id = Number(btn.dataset.id), msg = document.getElementById('capMsg');
     try {
-      if (btn.dataset.act === 'open') {
-        const out = await postCaptcha('/api/captcha/open', {id});
-        msg.textContent = out.instruction || '已打开，请在浏览器完成验证';
-      } else {
-        const out = await postCaptcha('/api/captcha/done', {id});
-        msg.textContent = out.cookie_saved ? `已关闭并保存 Cookie(${out.cookie_len})` : (out.warning || '已关闭');
-      }
+      if (btn.dataset.act === 'open') { const out = await postJSON('/api/captcha/open', {id}); msg.textContent = out.instruction || '已打开'; }
+      else { const out = await postJSON('/api/captcha/done', {id}); msg.textContent = out.cookie_saved ? '已保存 Cookie' : (out.warning||'已关闭'); }
       await loadCaptcha();
     } catch (e) { showErr(e); }
   };
@@ -234,28 +271,28 @@ async function loadCaptcha() {
 
 async function loadCrm() {
   const d = await api('/api/entities?limit=100');
-  document.getElementById('crmBody').innerHTML = (d.items||[]).map(e =>
-    `<tr><td>${esc(e.name)}</td><td>${esc(e.entity_type||'-')}</td><td>${esc(e.city||'-')}</td><td>${esc(e.notice_count)}</td><td>${esc(e.last_notice_at||'-')}</td></tr>`
-  ).join('') || '<tr><td colspan=5>暂无</td></tr>';
+  document.getElementById('crmBody').innerHTML = (d.items||[]).map(e => {
+    const tags = (e.service_tags||[]).map(t => '<span class="tag">'+esc(t.k)+'×'+esc(t.n)+'</span>').join('') || '-';
+    return '<tr><td>'+esc(e.name)+'</td><td>'+esc(e.entity_type||'-')+'</td><td>'+esc(e.city||'-')+'</td><td>'+tags+'</td><td>'+esc(e.notice_count)+'</td><td>'+esc(e.last_notice_at||'-')+'</td></tr>';
+  }).join('') || '<tr><td colspan=6>暂无</td></tr>';
 }
 
-const loaders = {
-  monitor: loadMonitor,
-  incr: loadNotices,
-  clean: loadClean,
-  work: loadWork,
-  kw: loadKw,
-  captcha: loadCaptcha,
-  crm: loadCrm,
-};
+function refillCities() {
+  const p = document.getElementById('lProv').value;
+  const city = document.getElementById('lCity');
+  const keep = city.value, list = META.province_city[p] || [];
+  city.innerHTML = '<option value="">全部</option>' + list.map(c => '<option value="'+esc(c)+'">'+esc(c)+'</option>').join('');
+  if (list.includes(keep)) city.value = keep;
+}
+
+const loaders = {monitor:loadMonitor, leads:loadLeads, clean:loadClean, kw:loadKw, captcha:loadCaptcha, crm:loadCrm};
 
 async function boot() {
   try {
     META = await api('/api/meta');
-    fillSources(document.getElementById('iSource'));
-    fillSources(document.getElementById('fSource'));
-    const prov = document.getElementById('fProv');
-    prov.innerHTML = '<option value="">全部</option>' + Object.keys(META.province_city||{}).map(p => `<option value="${esc(p)}">${esc(p)}</option>`).join('');
+    fillSelect(document.getElementById('lSource'), META.sources);
+    const prov = document.getElementById('lProv');
+    prov.innerHTML = '<option value="">全部</option>' + Object.keys(META.province_city||{}).map(p => '<option value="'+esc(p)+'">'+esc(p)+'</option>').join('');
     await loadMonitor();
   } catch (e) { showErr(e); }
 }
@@ -269,11 +306,55 @@ document.querySelectorAll('nav button').forEach(btn => {
     try { await loaders[btn.dataset.tab](); } catch (e) { showErr(e); }
   };
 });
-document.getElementById('iSearch').onclick = () => { iOffset = 0; loadNotices().catch(showErr); };
-document.getElementById('iPrev').onclick = () => { iOffset = Math.max(0, iOffset - PAGE); loadNotices().catch(showErr); };
-document.getElementById('iNext').onclick = () => { iOffset += PAGE; loadNotices().catch(showErr); };
-document.getElementById('fProv').onchange = () => { refillCities(); };
-document.getElementById('fGo').onclick = () => loadWork().catch(showErr);
+
+document.getElementById('lSearch').onclick = () => { lOffset = 0; loadLeads().catch(showErr); };
+document.getElementById('lPrev').onclick = () => { lOffset = Math.max(0, lOffset - PAGE); loadLeads().catch(showErr); };
+document.getElementById('lNext').onclick = () => { lOffset += PAGE; loadLeads().catch(showErr); };
+document.getElementById('lProv').onchange = refillCities;
+document.getElementById('lExport').onclick = () => {
+  const qs = new URLSearchParams();
+  const src=document.getElementById('lSource').value, lead=document.getElementById('lLead').value, q=document.getElementById('lQ').value.trim();
+  if (src) qs.set('source_id', src);
+  if (lead) qs.set('lead_status', lead);
+  if (q) qs.set('q', q);
+  if (document.getElementById('lPass').checked) qs.set('only_pass','1');
+  qs.set('sort', document.getElementById('lSort').value);
+  window.open('/api/notices/export?'+qs.toString(), '_blank');
+};
+document.getElementById('crawlNow').onclick = async () => {
+  const msg = document.getElementById('crawlMsg');
+  try {
+    const out = await postJSON('/api/crawl/run', {pages: 1});
+    msg.textContent = out.triggered ? ('已触发爬取 (pid='+out.pid+')，稍后刷新看结果') : (out.error || '未触发');
+    setTimeout(() => loadMonitor().catch(showErr), 3000);
+  } catch (e) { showErr(e); }
+};
+document.getElementById('kwAdd').onclick = async () => {
+  const inp = document.getElementById('kwNew'), msg = document.getElementById('kwMsg');
+  const v = inp.value.trim();
+  if (!v) return;
+  try { await postJSON('/api/keywords', {keyword: v}); inp.value=''; msg.textContent='已新增 '+v; await loadKw(); }
+  catch (e) { showErr(e); }
+};
+document.getElementById('leadBody').addEventListener('change', async (ev) => {
+  const t = ev.target;
+  if (t.classList.contains('lead-sel')) {
+    const id = Number(t.dataset.id), act = t.dataset.act, body = {id};
+    if (act === 'lead') body.lead_status = t.value;
+    else if (act === 'amount') body.amount_status = t.value;
+    try { await postJSON('/api/notices/'+id+'/lead', body); } catch (e) { showErr(e); }
+  }
+  if (t.classList.contains('remark')) {
+    try { await postJSON('/api/notices/'+Number(t.dataset.id)+'/lead', {remark: t.value}); } catch (e) { showErr(e); }
+  }
+});
+document.getElementById('leadBody').addEventListener('click', async (ev) => {
+  const btn = ev.target.closest('button[data-act="read"]');
+  if (!btn) return;
+  try { await postJSON('/api/notices/'+Number(btn.dataset.id)+'/lead', {read: true}); loadLeads().catch(showErr); }
+  catch (e) { showErr(e); }
+});
+
 boot();
 </script>
 </body>

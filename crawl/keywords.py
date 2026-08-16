@@ -60,3 +60,62 @@ def enabled_keywords(fallback_trial: bool = True) -> list[str]:
     if fallback_trial:
         return trial_keywords()
     return []
+
+
+def all_keywords() -> list[dict]:
+    """词库全量（含启停状态）。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT keyword, enabled, group_name FROM keyword_state ORDER BY enabled DESC, keyword")
+            return list(cur.fetchall())
+    finally:
+        conn.close()
+
+
+def add_keyword(keyword: str, group_name: str = "active", enabled: bool = True) -> dict:
+    kw = (keyword or "").strip()
+    if not kw:
+        return {"ok": False, "error": "empty_keyword"}
+    conn = connect(autocommit=True)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "INSERT INTO keyword_state (keyword, enabled, group_name) VALUES (%s,%s,%s) "
+                "ON DUPLICATE KEY UPDATE enabled=VALUES(enabled), group_name=VALUES(group_name)",
+                (kw, 1 if enabled else 0, group_name),
+            )
+    finally:
+        conn.close()
+    sync_config_keywords()
+    return {"ok": True, "keyword": kw}
+
+
+def delete_keyword(keyword: str) -> dict:
+    kw = (keyword or "").strip()
+    if not kw:
+        return {"ok": False, "error": "empty_keyword"}
+    conn = connect(autocommit=True)
+    try:
+        with conn.cursor() as cur:
+            cur.execute("DELETE FROM keyword_state WHERE keyword=%s", (kw,))
+    finally:
+        conn.close()
+    sync_config_keywords()
+    return {"ok": True, "keyword": kw}
+
+
+def sync_config_keywords() -> dict:
+    """把当前启用关键词回写到 config/crawl_config.json 的 keywords.active（作模板）。"""
+    import json
+
+    from crawl.config_loader import ROOT
+
+    kws = enabled_keywords(fallback_trial=False)
+    if not kws:
+        return {"ok": False, "error": "no_enabled_keywords"}
+    path = ROOT / "config" / "crawl_config.json"
+    data = json.loads(path.read_text(encoding="utf-8"))
+    data.setdefault("keywords", {})["active"] = kws
+    path.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+    return {"ok": True, "active": kws}

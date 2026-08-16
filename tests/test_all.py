@@ -327,6 +327,53 @@ class TestDetail(unittest.TestCase):
         self.assertIn("33.146000 万元", d.get("amount_text") or "")
 
 
+class TestWorkbench(unittest.TestCase):
+    def test_update_notice_lead(self):
+        from crawl.actions import update_notice_lead
+        from crawl.db_store import upsert_notices
+        from crawl.models import Notice
+        from db import connect
+
+        upsert_notices([Notice(source_id="ccgp", source_name="测试", title="线索工作台测试绿植租摆", external_id="pytest-lead-1")])
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT id FROM notices WHERE external_id=%s", ("pytest-lead-1",))
+                nid = cur.fetchone()["id"]
+        finally:
+            conn.close()
+        out = update_notice_lead(nid, lead_status="跟进中", amount_status="已确认", remark="重点跟进")
+        self.assertTrue(out["ok"])
+        conn = connect()
+        try:
+            with conn.cursor() as cur:
+                cur.execute("SELECT lead_status, amount_status, remark FROM notices WHERE id=%s", (nid,))
+                row = cur.fetchone()
+        finally:
+            conn.close()
+        self.assertEqual(row["lead_status"], "跟进中")
+        self.assertEqual(row["amount_status"], "已确认")
+        self.assertEqual(row["remark"], "重点跟进")
+
+    def test_export_csv_header(self):
+        from crawl.ledger_data import export_csv
+
+        csv_text = export_csv(lead_status="跟进中")
+        self.assertTrue(csv_text.startswith("﻿"))
+        self.assertIn("标题", csv_text)
+
+    def test_keyword_add_delete(self):
+        from unittest import mock
+
+        from crawl import keywords
+
+        with mock.patch.object(keywords, "sync_config_keywords", return_value={"ok": True}):
+            self.assertTrue(keywords.add_keyword("测试词XYZ")["ok"])
+            self.assertTrue(any(k["keyword"] == "测试词XYZ" for k in keywords.all_keywords()))
+            self.assertTrue(keywords.delete_keyword("测试词XYZ")["ok"])
+            self.assertFalse(any(k["keyword"] == "测试词XYZ" for k in keywords.all_keywords()))
+
+
 class TestEntry(unittest.TestCase):
     def test_run_incremental_entry_imports(self):
         """主增量入口 import 链必须可用（曾因 build_incremental_html 拼错而崩）。"""

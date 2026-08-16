@@ -5,7 +5,7 @@ import json
 import re
 import statistics
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
 from datetime import datetime, timedelta
 from html import escape
 from pathlib import Path
@@ -89,7 +89,7 @@ def main():
     try:
         with conn.cursor() as cur:
             cur.execute(
-                "SELECT id, title, city, province, publish_date, created_at, source_id, buyer "
+                "SELECT id, title, city, province, publish_date, created_at, source_id, buyer, keyword "
                 "FROM notices WHERE clean_status IS NULL OR clean_status!='drop'"
             )
             notices = cur.fetchall()
@@ -139,11 +139,18 @@ def main():
                     if gaps:
                         med = int(statistics.median(gaps))
                         next_hint = f"粗估间隔约{med}天；下次约{(last + timedelta(days=med)).date() if last else '-'}"
+                tag_counter = Counter()
+                for h in hist:
+                    k = (h.get("keyword") or "").strip()
+                    if k:
+                        tag_counter[k] += 1
+                service_tags = [{"k": k, "n": n} for k, n in tag_counter.most_common()]
                 meta = {
                     "notice_ids": [h["id"] for h in hist[:50]],
                     "sources": list({h["source_id"] for h in hist}),
                     "norm_key": key,
                     "name_variants": sorted(set(name_variants[key]))[:20],
+                    "service_tags": service_tags,
                 }
                 cur.execute(
                     "INSERT INTO entities (name, entity_type, city, province, notice_count, last_notice_at, next_bid_hint, meta_json) "
@@ -169,15 +176,21 @@ def main():
                         "notice_count": len(hist),
                         "last_notice_at": last.isoformat(timespec="seconds") if last else None,
                         "next_bid_hint": next_hint,
+                        "service_tags": service_tags,
                     }
                 )
     finally:
         conn.close()
 
     entities.sort(key=lambda x: -x["notice_count"])
+
+    def _tags(e):
+        tags = e.get("service_tags") or []
+        return escape("、".join(f"{t['k']}×{t['n']}" for t in tags[:5]) or "-")
+
     rows = "".join(
         f"<tr><td>{escape(e['name'])}</td><td>{escape(e.get('city') or '-')}</td>"
-        f"<td>{e['notice_count']}</td><td>{escape(e.get('last_notice_at') or '-')}</td>"
+        f"<td>{_tags(e)}</td><td>{e['notice_count']}</td><td>{escape(e.get('last_notice_at') or '-')}</td>"
         f"<td>{escape(e.get('next_bid_hint') or '-')}</td></tr>"
         for e in entities[:200]
     )
@@ -185,8 +198,8 @@ def main():
 <style>body{{font-family:Microsoft YaHei,sans-serif;margin:24px}}table{{border-collapse:collapse;width:100%}}
 th,td{{border:1px solid #ddd;padding:8px;font-size:13px}}th{{background:#f3f4f6}}</style></head>
 <body><h1>CRM 主体（规范化去重 / 全国同名合并）</h1><p>共 {len(entities)} 个主体</p>
-<table><thead><tr><th>主体</th><th>主城</th><th>公告数</th><th>最近公告</th><th>下次粗估</th></tr></thead>
-<tbody>{rows or '<tr><td colspan=5>暂无</td></tr>'}</tbody></table></body></html>"""
+<table><thead><tr><th>主体</th><th>主城</th><th>业务</th><th>公告数</th><th>最近公告</th><th>下次粗估</th></tr></thead>
+<tbody>{rows or '<tr><td colspan=6>暂无</td></tr>'}</tbody></table></body></html>"""
     OUT_HTML.parent.mkdir(parents=True, exist_ok=True)
     OUT_HTML.write_text(html, encoding="utf-8")
     summary = ROOT / "data" / "web" / "crm_summary.json"

@@ -104,19 +104,23 @@ def summary() -> dict:
     }
 
 
-def notices(
-    *,
-    source_id: str | None = None,
-    province: str | None = None,
-    city: str | None = None,
-    clean_status: str | None = None,
-    only_pass: bool = False,
-    q: str | None = None,
-    limit: int = 50,
-    offset: int = 0,
-) -> dict:
-    limit = clamp_limit(limit)
-    offset = clamp_offset(offset)
+NOTICE_SELECT = (
+    "id, title, source_id, source_name, city, province, keyword, publish_date, "
+    "created_at, detail_url, official_url, clean_status, clean_reason, manual_label, "
+    "amount, amount_text, buyer, agency, project_code, read_at, lead_status, amount_status, remark"
+)
+
+_SORTS = {
+    "created": "created_at DESC",
+    "amount": "amount IS NULL, amount DESC",
+    "publish": "publish_date IS NULL, publish_date DESC",
+}
+
+
+def _build_notices_where(
+    source_id=None, province=None, city=None, clean_status=None, only_pass=False,
+    q=None, lead_status=None, amount_min=None, amount_max=None,
+) -> tuple[str, list[Any]]:
     where = ["1=1"]
     args: list[Any] = []
     if source_id:
@@ -141,15 +145,43 @@ def notices(
     if only_pass:
         where.append("(clean_status IS NULL OR clean_status<>'drop')")
         where.append("(manual_label IS NULL OR manual_label<>'irrelevant')")
+    if lead_status:
+        where.append("lead_status=%s")
+        args.append(lead_status)
+    if amount_min is not None:
+        where.append("amount >= %s")
+        args.append(amount_min)
+    if amount_max is not None:
+        where.append("amount <= %s")
+        args.append(amount_max)
     if q:
         where.append("title LIKE %s")
         args.append(f"%{q}%")
-    wsql = " AND ".join(where)
+    return " AND ".join(where), args
+
+
+def notices(
+    *,
+    source_id: str | None = None,
+    province: str | None = None,
+    city: str | None = None,
+    clean_status: str | None = None,
+    only_pass: bool = False,
+    q: str | None = None,
+    lead_status: str | None = None,
+    amount_min: float | None = None,
+    amount_max: float | None = None,
+    sort: str = "created",
+    limit: int = 50,
+    offset: int = 0,
+) -> dict:
+    limit = clamp_limit(limit)
+    offset = clamp_offset(offset)
+    wsql, args = _build_notices_where(source_id, province, city, clean_status, only_pass, q, lead_status, amount_min, amount_max)
+    order = _SORTS.get(sort, _SORTS["created"])
     total = int(_one(f"SELECT COUNT(*) AS c FROM notices WHERE {wsql}", tuple(args)) or 0)
     rows = _rows(
-        "SELECT id, title, source_id, source_name, city, province, keyword, publish_date, "
-        "created_at, detail_url, clean_status, clean_reason, manual_label, amount_text "
-        f"FROM notices WHERE {wsql} ORDER BY created_at DESC LIMIT %s OFFSET %s",
+        f"SELECT {NOTICE_SELECT} FROM notices WHERE {wsql} ORDER BY {order} LIMIT %s OFFSET %s",
         tuple(args) + (limit, offset),
     )
     cutoff = datetime.now() - timedelta(hours=NEW_HOURS)
@@ -164,6 +196,32 @@ def notices(
         r["is_new"] = is_new
         r["capability_hint"] = source_capability_hint(r.get("source_id") or "")
     return {"total": total, "limit": limit, "offset": offset, "items": rows}
+
+
+def export_csv(**filters) -> str:
+    import csv
+    import io
+
+    wsql, args = _build_notices_where(
+        filters.get("source_id"), filters.get("province"), filters.get("city"),
+        filters.get("clean_status"), filters.get("only_pass"), filters.get("q"),
+        filters.get("lead_status"), filters.get("amount_min"), filters.get("amount_max"),
+    )
+    order = _SORTS.get(filters.get("sort"), _SORTS["created"])
+    rows = _rows(f"SELECT {NOTICE_SELECT} FROM notices WHERE {wsql} ORDER BY {order} LIMIT 5000", tuple(args))
+    buf = io.StringIO()
+    w = csv.writer(buf)
+    w.writerow(["ID", "标题", "源站", "城市", "省", "关键词", "发布时间", "首次发现", "金额(元)", "金额文本",
+                "招标人", "代理", "项目编号", "处理状态", "金额确认", "已读", "详情链接", "原文链接"])
+    for r in rows:
+        w.writerow([
+            r.get("id"), r.get("title"), r.get("source_id"), r.get("city"), r.get("province"),
+            r.get("keyword"), r.get("publish_date"), r.get("created_at"), r.get("amount"),
+            r.get("amount_text"), r.get("buyer"), r.get("agency"), r.get("project_code"),
+            r.get("lead_status"), r.get("amount_status"), r.get("read_at"),
+            r.get("detail_url"), r.get("official_url"),
+        ])
+    return "﻿" + buf.getvalue()
 
 
 def runs(limit: int = 40) -> dict:
@@ -213,11 +271,24 @@ def captcha(limit: int = 40) -> dict:
 
 
 def entities(limit: int = 100) -> dict:
+    import json as _json
+
     limit = clamp_limit(limit, 100)
-    return {
-        "items": _rows(
-            "SELECT id, name, entity_type, city, province, notice_count, last_notice_at, next_bid_hint "
-            "FROM entities ORDER BY notice_count DESC, id DESC LIMIT %s",
-            (limit,),
-        )
-    }
+    items = _rows(
+        "SELECT id, name, entity_type, city, province, notice_count, last_notice_at, next_bid_hint, meta_json "
+        "FROM entities ORDER BY notice_count DESC, id DESC LIMIT %s",
+        (limit,),
+    )
+    for it in items:
+        meta = it.get("meta_json")
+        tags = []
+        if isinstance(meta, str):
+            try:
+                meta = _json.loads(meta)
+            except Exception:
+                meta = None
+        if isinstance(meta, dict):
+            tags = meta.get("service_tags") or []
+        it["service_tags"] = tags
+        it.pop("meta_json", None)
+    return {"items": items}

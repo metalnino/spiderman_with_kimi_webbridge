@@ -26,6 +26,10 @@ def main():
                 ("clean_status", "ALTER TABLE notices ADD COLUMN clean_status VARCHAR(32) NULL"),
                 ("clean_reason", "ALTER TABLE notices ADD COLUMN clean_reason VARCHAR(255) NULL"),
                 ("manual_label", "ALTER TABLE notices ADD COLUMN manual_label VARCHAR(32) NULL"),
+                ("read_at", "ALTER TABLE notices ADD COLUMN read_at DATETIME NULL"),
+                ("lead_status", "ALTER TABLE notices ADD COLUMN lead_status VARCHAR(32) NOT NULL DEFAULT '待处理'"),
+                ("amount_status", "ALTER TABLE notices ADD COLUMN amount_status VARCHAR(32) NULL"),
+                ("remark", "ALTER TABLE notices ADD COLUMN remark VARCHAR(512) NULL"),
             ]:
                 if not column_exists(cur, "notices", col):
                     cur.execute(ddl)
