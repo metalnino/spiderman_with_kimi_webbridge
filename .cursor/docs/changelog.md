@@ -14,3 +14,4 @@
 | 2026-08-11 | 接入江苏招标网 jiangsu_zhaobiao（账号登录可选+滑块人工；列表 Dqsearch） |
 | 2026-08-14 | 修复主入口 ImportError（build_incremental_html→list）；网络测试 SPIDER_LIVE_TESTS=1 门控；http 4xx/5xx/网络错误分类；关键词上限可配(默认不限)；验证码待办去重；6 站配置/看板同步；补根 README；unittest 26/26 |
 | 2026-08-14 | 详情字段抓取起步：crawl/detail.py 新增 ccgp 详情 HTTP 解析（金额/招标人/代理/项目编号）并接入 runner 回填；探针确认 ggzy=JS壳、jiangsu=Cloudflare、cebpub=验证码、chinabidding=登录墙（待接入）；unittest 27/27 |
+| 2026-08-16 | 两路合并并 NAS 部署：接入 jiangsu HTTP 521 的 __jsl_clearance_s 纯 HTTP 解；定时改固定时刻 8/12/18/22 东八区；CRM 主体规范化全国合并(uk_name)；SSH 重建镜像验证 healthy |
