@@ -11,7 +11,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     CRAWL_CRON_HOURS=8,12,18,22
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# 群晖直连 PyPI 易超时；用清华镜像 + 超时重试
+RUN pip install --no-cache-dir -r requirements.txt \
+    -i https://pypi.tuna.tsinghua.edu.cn/simple --default-timeout=120 --retries 5
 
 COPY . .
 

@@ -4,14 +4,14 @@
 
 绿植招采线索持续运营台：固定源站增量抓取 → 清洗 → MySQL → 可筛可看；关键词可迭代。
 
-## 固定源站
+## 固定源站（启用 4 站）
 
 1. cebpub（招标投标公共服务平台）
 2. chinabidding（采招网，列表级）
-3. ggzy（全国公共资源交易平台）
-4. ccgp（中国政府采购网）
-5. jsggzy（江苏公共资源 / ggzy 江苏切片）
-6. jiangsu_zhaobiao（江苏招标网，账号登录可选）
+3. ccgp（中国政府采购网，详情开放可拿金额）
+4. jiangsu_zhaobiao（江苏招标网，账号登录可选）
+
+> 已停用（代码保留，config/sources.json 里 enabled=false）：ggzy、jsggzy。
 
 ## 分期
 

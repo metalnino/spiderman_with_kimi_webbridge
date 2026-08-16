@@ -3,7 +3,8 @@
   "version": "1.0-draft",
   "updated": "2026-08-09",
   "scope": {
-    "fixed_sources": ["cebpub", "chinabidding", "ggzy", "ccgp", "jsggzy", "jiangsu_zhaobiao"],
+    "fixed_sources": ["cebpub", "chinabidding", "ccgp", "jiangsu_zhaobiao"],
+    "disabled_sources": ["ggzy", "jsggzy"],
     "goal": "持续增量可见、相对准确、关键词可迭代、运行/获取/清洗可观测"
   },
   "crawl_strategy": {
