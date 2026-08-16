@@ -132,6 +132,11 @@
       "area_code": "440000"
     },
     {
+      "name": "广州",
+      "province": "广东",
+      "area_code": "440000"
+    },
+    {
       "name": "武汉",
       "province": "湖北",
       "area_code": "420000"
@@ -142,9 +147,11 @@
       "area_code": "340000"
     }
   ],
+  "only_target_cities": true,
   "notes": {
     "area_granularity": "站点 area 仅为省级；城市靠标题/正文二次匹配",
     "city_filter_mode": "province_then_title",
+    "city_scope": "只看目标城市（南京上海苏州杭州武汉深圳广州合肥）；only_target_cities=true 抓取即过滤，标题匹配不到目标城市则不入库",
     "keyword_usage": "爬虫读取 keywords.active；commercial=商业体场景；weak_or_noisy 噪声大",
     "bid_status": "可投标 ≈ open_time > now；已开标 ≈ open_time <= now。最终以官网报名截止为准。",
     "relevance": "场景词不再单独检索；标题需正茎词且过负向过滤"

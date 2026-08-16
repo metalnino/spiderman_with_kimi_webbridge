@@ -35,3 +35,11 @@ def trial_keywords() -> list[str]:
 
 def cities() -> list[dict]:
     return list(crawl_cfg().get("cities") or [])
+
+
+def target_city_names() -> list[str]:
+    return [c["name"] for c in cities() if c.get("name")]
+
+
+def only_target_cities() -> bool:
+    return bool(crawl_cfg().get("only_target_cities"))

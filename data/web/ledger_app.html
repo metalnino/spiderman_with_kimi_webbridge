@@ -65,6 +65,7 @@ a:hover{text-decoration:underline}
     <label>金额 <input type="number" id="lAmtMin" placeholder="最小(元)" style="width:90px"/> - <input type="number" id="lAmtMax" placeholder="最大(元)" style="width:90px"/></label>
     <label>标题 <input type="text" id="lQ" placeholder="关键词"/></label>
     <label>排序 <select id="lSort"><option value="created">按发现时间</option><option value="amount">按金额</option><option value="publish">按发布时间</option></select></label>
+    <label><input type="checkbox" id="lTarget" checked/> 仅目标城市</label>
     <label><input type="checkbox" id="lPass"/> 仅通过</label>
     <button class="primary" id="lSearch">查询</button>
     <button class="secondary" id="lExport">导出CSV</button>
@@ -182,7 +183,7 @@ async function loadLeads() {
         city=document.getElementById('lCity').value, lead=document.getElementById('lLead').value,
         amn=document.getElementById('lAmtMin').value, amx=document.getElementById('lAmtMax').value,
         q=document.getElementById('lQ').value.trim(), sort=document.getElementById('lSort').value,
-        pass=document.getElementById('lPass').checked;
+        pass=document.getElementById('lPass').checked, target=document.getElementById('lTarget').checked;
   if (src) qs.set('source_id', src);
   if (prov) qs.set('province', prov);
   if (city) qs.set('city', city);
@@ -192,6 +193,7 @@ async function loadLeads() {
   if (q) qs.set('q', q);
   qs.set('sort', sort);
   if (pass) qs.set('only_pass','1');
+  if (target) qs.set('target_only','1');
   const d = await api('/api/notices?'+qs.toString());
   document.getElementById('leadBody').innerHTML = (d.items||[]).map(r => {
     const readCls = r.read_at ? 'read' : 'unread';
@@ -318,6 +320,7 @@ document.getElementById('lExport').onclick = () => {
   if (lead) qs.set('lead_status', lead);
   if (q) qs.set('q', q);
   if (document.getElementById('lPass').checked) qs.set('only_pass','1');
+  if (document.getElementById('lTarget').checked) qs.set('target_only','1');
   qs.set('sort', document.getElementById('lSort').value);
   window.open('/api/notices/export?'+qs.toString(), '_blank');
 };

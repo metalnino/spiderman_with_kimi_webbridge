@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from crawl.captcha_queue import open_todo
-from crawl.config_loader import anti_bot_cfg, sources_cfg
+from crawl.config_loader import anti_bot_cfg, only_target_cities, sources_cfg, target_city_names
 from crawl.db_store import finish_run, start_run, upsert_notices
 from crawl.keywords import enabled_keywords
 from crawl.pipeline.apply_clean import refresh_clean_status
@@ -45,6 +45,9 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
     run_id = start_run(source_id)
     try:
         notices = list(src.fetch(kws, max_pages=max_pages))
+        if only_target_cities():
+            targets = set(target_city_names())
+            notices = [n for n in notices if (n.city or "") in targets]
         stats = upsert_notices(notices)
         clean_stats = refresh_clean_status(limit=max(200, stats["attempted"] * 3))
         detail_stats = enrich_source_details(source_id, limit=_max_detail_per_run())

@@ -83,6 +83,7 @@ def notices(
     sort: str = "created",
     limit: int = 50,
     offset: int = 0,
+    target_only: bool = False,
 ):
     return data.notices(
         source_id=source_id,
@@ -97,6 +98,7 @@ def notices(
         sort=sort,
         limit=limit,
         offset=offset,
+        target_only=target_only,
     )
 
 
@@ -112,11 +114,12 @@ def notices_export(
     amount_min: float | None = None,
     amount_max: float | None = None,
     sort: str = "created",
+    target_only: bool = False,
 ):
     csv_text = data.export_csv(
         source_id=source_id, province=province, city=city, clean_status=clean_status,
         only_pass=only_pass, q=q, lead_status=lead_status,
-        amount_min=amount_min, amount_max=amount_max, sort=sort,
+        amount_min=amount_min, amount_max=amount_max, sort=sort, target_only=target_only,
     )
     return Response(
         content=csv_text.encode("utf-8"),

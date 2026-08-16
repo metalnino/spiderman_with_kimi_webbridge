@@ -43,15 +43,17 @@ def update_notice_lead(
         params.append((remark or "")[:500])
     if not sets:
         return {"ok": False, "error": "no_fields"}
-    params.append(notice_id)
     conn = connect(autocommit=True)
     try:
         with conn.cursor() as cur:
+            cur.execute("SELECT id FROM notices WHERE id=%s", (notice_id,))
+            if cur.fetchone() is None:
+                return {"ok": False, "error": "not_found", "notice_id": notice_id}
+            params.append(notice_id)
             cur.execute(f"UPDATE notices SET {', '.join(sets)} WHERE id=%s", tuple(params))
-            ok = cur.rowcount > 0
+        return {"ok": True, "notice_id": notice_id}
     finally:
         conn.close()
-    return {"ok": ok, "notice_id": notice_id}
 
 
 _lock = threading.Lock()

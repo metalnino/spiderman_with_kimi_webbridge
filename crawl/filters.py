@@ -1,15 +1,21 @@
-"""Cascade filter helpers for list/dashboard (pure functions for tests)."""
+"""Cascade filter helpers for list/dashboard."""
 from __future__ import annotations
 
+from crawl.config_loader import cities as _cfg_cities
 
-PROVINCE_CITY = {
-    "江苏": ["南京", "苏州"],
-    "上海": ["上海"],
-    "浙江": ["杭州"],
-    "广东": ["深圳"],
-    "湖北": ["武汉"],
-    "安徽": ["合肥"],
-}
+
+def _build_province_city() -> dict[str, list[str]]:
+    m: dict[str, list[str]] = {}
+    for c in _cfg_cities():
+        prov = c.get("province")
+        name = c.get("name")
+        if prov and name and name not in m.setdefault(prov, []):
+            m[prov].append(name)
+    return m
+
+
+# 省→市 单一配置源：来自 config/crawl_config.json 的 cities
+PROVINCE_CITY = _build_province_city()
 
 
 def cities_for_province(province: str | None) -> list[str]:

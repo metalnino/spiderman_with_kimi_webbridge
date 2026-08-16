@@ -11,6 +11,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 from db import connect  # noqa: E402
 
+from crawl.config_loader import target_city_names
 from crawl.filters import PROVINCE_CITY, source_capability_hint
 from crawl.sources import enabled_source_ids
 
@@ -119,7 +120,7 @@ _SORTS = {
 
 def _build_notices_where(
     source_id=None, province=None, city=None, clean_status=None, only_pass=False,
-    q=None, lead_status=None, amount_min=None, amount_max=None,
+    q=None, lead_status=None, amount_min=None, amount_max=None, target_only=False,
 ) -> tuple[str, list[Any]]:
     where = ["1=1"]
     args: list[Any] = []
@@ -154,6 +155,12 @@ def _build_notices_where(
     if amount_max is not None:
         where.append("amount <= %s")
         args.append(amount_max)
+    if target_only:
+        names = target_city_names()
+        if names:
+            placeholders = ",".join(["%s"] * len(names))
+            where.append(f"city IN ({placeholders})")
+            args.extend(names)
     if q:
         where.append("title LIKE %s")
         args.append(f"%{q}%")
@@ -174,10 +181,11 @@ def notices(
     sort: str = "created",
     limit: int = 50,
     offset: int = 0,
+    target_only: bool = False,
 ) -> dict:
     limit = clamp_limit(limit)
     offset = clamp_offset(offset)
-    wsql, args = _build_notices_where(source_id, province, city, clean_status, only_pass, q, lead_status, amount_min, amount_max)
+    wsql, args = _build_notices_where(source_id, province, city, clean_status, only_pass, q, lead_status, amount_min, amount_max, target_only)
     order = _SORTS.get(sort, _SORTS["created"])
     total = int(_one(f"SELECT COUNT(*) AS c FROM notices WHERE {wsql}", tuple(args)) or 0)
     rows = _rows(
@@ -206,6 +214,7 @@ def export_csv(**filters) -> str:
         filters.get("source_id"), filters.get("province"), filters.get("city"),
         filters.get("clean_status"), filters.get("only_pass"), filters.get("q"),
         filters.get("lead_status"), filters.get("amount_min"), filters.get("amount_max"),
+        filters.get("target_only"),
     )
     order = _SORTS.get(filters.get("sort"), _SORTS["created"])
     rows = _rows(f"SELECT {NOTICE_SELECT} FROM notices WHERE {wsql} ORDER BY {order} LIMIT 5000", tuple(args))
