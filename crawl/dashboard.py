@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from db import connect  # noqa: E402
 
 from crawl.filters import PROVINCE_CITY, source_capability_hint
+from crawl.sources import enabled_source_ids
 
 OUT = ROOT / "data" / "web" / "dashboard.html"
 
@@ -104,6 +105,7 @@ def build_dashboard() -> Path:
     clean_sum = "".join(f"<li>{escape(x['decision'])}: {x['c']}</li>" for x in clean_stats) or "<li>暂无</li>"
     drop_sum = "".join(f"<li>{escape(x['reason'] or '-')}: {x['c']}</li>" for x in drop_reasons) or "<li>暂无</li>"
     prov_opts = "".join(f"<option value='{escape(p)}'>{escape(p)}</option>" for p in PROVINCE_CITY)
+    src_opts = "".join(f'<option value="{escape(s)}">{escape(s)}</option>' for s in enabled_source_ids())
     city_map_json = json.dumps(PROVINCE_CITY, ensure_ascii=False)
 
     html = f"""<!DOCTYPE html>
@@ -158,9 +160,7 @@ th{{background:#f3f4f6;text-align:left}}
   <h2>线索工作台（级联筛选）</h2>
   <div class="filters">
     <label>源站 <select id="fSource"><option value="">全部</option>
-      <option value="cebpub">cebpub</option><option value="chinabidding">chinabidding</option>
-      <option value="ggzy">ggzy</option><option value="ccgp">ccgp</option>
-      <option value="jsggzy">jsggzy</option><option value="jiangsu_zhaobiao">jiangsu_zhaobiao</option></select></label>
+      {src_opts}</select></label>
     <label>省 <select id="fProv"><option value="">全部</option>{prov_opts}</select></label>
     <label>市 <select id="fCity"><option value="">全部</option></select></label>
     <label>仅通过 <input type="checkbox" id="fPass"/></label>

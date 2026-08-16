@@ -8,7 +8,7 @@ from crawl.db_store import finish_run, start_run, upsert_notices
 from crawl.keywords import enabled_keywords
 from crawl.pipeline.apply_clean import refresh_clean_status
 from crawl.detail import enrich_source_details
-from crawl.sources import get_source
+from crawl.sources import enabled_source_ids, get_source
 from crawl.warm_session import warm_source
 
 
@@ -88,7 +88,7 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
 
 def run_incremental(*, sources: list[str] | None = None, max_pages: int = 1) -> list[dict]:
     cfg = sources_cfg()
-    order = sources or ["ggzy", "chinabidding", "cebpub", "ccgp", "jsggzy", "jiangsu_zhaobiao"]
+    order = sources or enabled_source_ids()
     results = []
     for sid in order:
         sc = cfg.get(sid) or {}

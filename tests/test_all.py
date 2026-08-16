@@ -158,67 +158,47 @@ class TestP3(unittest.TestCase):
 
 
 class TestLedgerAPI(unittest.TestCase):
-    def test_bind_localhost_only(self):
-        from crawl.ledger_server import make_server
+    @classmethod
+    def setUpClass(cls):
+        from fastapi.testclient import TestClient
 
-        with self.assertRaises(ValueError):
-            make_server("1.2.3.4", 18765)
-        # Docker/NAS 允许 0.0.0.0
-        httpd = make_server("0.0.0.0", 0)
-        httpd.server_close()
+        from crawl.api import app
 
-    def test_route_readonly_and_notices(self):
-        from crawl.ledger_server import route_api
+        cls.client = TestClient(app)
 
-        code, health = route_api("/api/health", {})
-        self.assertEqual(code, 200)
-        self.assertTrue(health.get("ok"))
-        code, meta = route_api("/api/meta", {})
-        self.assertEqual(code, 200)
-        self.assertIn("province_city", meta)
-        code, notices = route_api("/api/notices", {"limit": ["5"]})
-        self.assertEqual(code, 200)
-        self.assertIn("items", notices)
-        self.assertLessEqual(len(notices["items"]), 5)
-        code, missing = route_api("/api/nope", {})
-        self.assertEqual(code, 404)
+    def test_health(self):
+        r = self.client.get("/api/health")
+        self.assertEqual(r.status_code, 200)
+        self.assertTrue(r.json()["ok"])
 
-    def test_http_get_and_reject_post(self):
-        import threading
-        import urllib.error
-        import urllib.request
+    def test_meta_sources_pruned(self):
+        r = self.client.get("/api/meta")
+        self.assertEqual(r.status_code, 200)
+        body = r.json()
+        self.assertIn("province_city", body)
+        # 只保留 4 站；ggzy/jsggzy 已停用
+        self.assertNotIn("ggzy", body["sources"])
+        self.assertNotIn("jsggzy", body["sources"])
+        self.assertEqual(len(body["sources"]), 4)
 
-        from crawl.ledger_server import make_server
+    def test_notices_limit(self):
+        r = self.client.get("/api/notices", params={"limit": "5"})
+        self.assertEqual(r.status_code, 200)
+        self.assertLessEqual(len(r.json()["items"]), 5)
 
-        httpd = make_server("127.0.0.1", 0)
-        host, port = httpd.server_address[:2]
-        base = f"http://{host}:{port}"
-        t = threading.Thread(target=httpd.serve_forever, daemon=True)
-        t.start()
-        try:
-            with urllib.request.urlopen(base + "/api/health", timeout=5) as resp:
-                body = json.loads(resp.read().decode("utf-8"))
-            self.assertTrue(body.get("ok"))
-            with urllib.request.urlopen(base + "/", timeout=5) as resp:
-                html = resp.read().decode("utf-8")
-            self.assertIn("绿植招采运营台", html)
-            req = urllib.request.Request(base + "/api/health", method="POST", data=b"{}")
-            with self.assertRaises(urllib.error.HTTPError) as cm:
-                urllib.request.urlopen(req, timeout=5)
-            self.assertEqual(cm.exception.code, 405)
-            # captcha POST 允许（坏 id → 400）
-            req2 = urllib.request.Request(
-                base + "/api/captcha/open",
-                method="POST",
-                data=b'{"id":0}',
-                headers={"Content-Type": "application/json"},
-            )
-            with self.assertRaises(urllib.error.HTTPError) as cm2:
-                urllib.request.urlopen(req2, timeout=5)
-            self.assertEqual(cm2.exception.code, 400)
-        finally:
-            httpd.shutdown()
-            httpd.server_close()
+    def test_readonly_post_rejected(self):
+        self.assertEqual(self.client.post("/api/health").status_code, 405)
+        self.assertEqual(self.client.put("/api/summary").status_code, 405)
+
+    def test_captcha_post_bad_id(self):
+        r = self.client.post("/api/captcha/open", json={"id": 0})
+        self.assertEqual(r.status_code, 400)
+        self.assertFalse(r.json()["ok"])
+
+    def test_index_serves_shell(self):
+        r = self.client.get("/")
+        self.assertEqual(r.status_code, 200)
+        self.assertIn("绿植招采运营台", r.text)
 
 
 class TestCaptchaFlow(unittest.TestCase):

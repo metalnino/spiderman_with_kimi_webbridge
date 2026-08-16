@@ -12,6 +12,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from db import connect  # noqa: E402
 
 from crawl.filters import PROVINCE_CITY, source_capability_hint
+from crawl.sources import enabled_source_ids
 
 NEW_HOURS = 48
 MAX_LIMIT = 200
@@ -66,7 +67,7 @@ def clamp_offset(raw: Any) -> int:
 def meta() -> dict:
     return {
         "province_city": PROVINCE_CITY,
-        "sources": ["cebpub", "chinabidding", "ggzy", "ccgp", "jsggzy", "jiangsu_zhaobiao"],
+        "sources": enabled_source_ids(),
         "new_hours": NEW_HOURS,
         "hints": {s: source_capability_hint(s) for s in ("chinabidding", "cebpub")},
     }

@@ -14,6 +14,17 @@ REGISTRY = {
     "jiangsu_zhaobiao": JiangsuZhaobiaoSource,
 }
 
+# 源站稳定顺序；是否启用由 config/sources.json 的 enabled 控制（ggzy/jsggzy 默认 disabled）
+SOURCE_ORDER = ["cebpub", "chinabidding", "ccgp", "ggzy", "jsggzy", "jiangsu_zhaobiao"]
+
+
+def enabled_source_ids() -> list[str]:
+    """返回已启用源站（按 SOURCE_ORDER）。"""
+    from crawl.config_loader import sources_cfg
+
+    cfg = sources_cfg()
+    return [sid for sid in SOURCE_ORDER if (cfg.get(sid) or {}).get("enabled") is not False]
+
 
 def get_source(source_id: str):
     cls = REGISTRY.get(source_id)

@@ -16,7 +16,7 @@
     "rate_limit_note": "易频繁访问；失败记 crawl_runs"
   },
   "ggzy": {
-    "enabled": true,
+    "enabled": false,
     "name": "全国公共资源交易平台",
     "api": "https://www.ggzy.gov.cn/information/pubTradingInfo/getTradList",
     "deal_time": "05",
@@ -39,7 +39,7 @@
     "note": "P0 全国词检索；详情验证码后置"
   },
   "jsggzy": {
-    "enabled": true,
+    "enabled": false,
     "name": "江苏省公共资源交易网",
     "home": "http://jsggzy.jszwfw.gov.cn/",
     "list_page": "http://jsggzy.jszwfw.gov.cn/jyxx/tradeInfonew.html",
