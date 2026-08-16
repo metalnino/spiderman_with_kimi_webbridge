@@ -10,9 +10,10 @@ services:
     env_file:
       - .env
     environment:
+      TZ: "Asia/Shanghai"
       LEDGER_HOST: "0.0.0.0"
       LEDGER_PORT: "8765"
-      CRAWL_INTERVAL_HOURS: "2"
+      CRAWL_CRON_HOURS: "8,12,18,22"
       CRAWL_ON_START: "0"
       CRAWL_PAGES: "1"
       # 若容器内解析不到公网域名，把 MYSQL_HOST 改成 NAS 局域网 IP 或 host.docker.internal

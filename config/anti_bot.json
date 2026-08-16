@@ -18,8 +18,8 @@
     "5 仍失败 → 列表字段入库，详情标记待补"
   ],
   "http": {
-    "timeout_sec": 20,
-    "retries": 2,
+    "timeout_sec": 40,
+    "retries": 3,
     "max_keywords_per_run": 0,
     "delay_ms_min": 800,
     "delay_ms_max": 2200,
@@ -50,7 +50,14 @@
     "ggzy": {
       "primary": "http",
       "warm": "optional",
+      "timeout_sec": 50,
+      "retries": 4,
       "on_captcha_829": "stop_keyword_backoff"
+    },
+    "jsggzy": {
+      "primary": "http",
+      "timeout_sec": 50,
+      "retries": 4
     },
     "chinabidding": {
       "primary": "http",
@@ -65,16 +72,16 @@
     },
     "cebpub": {
       "list": "http",
-      "detail": "webbridge_after_human_captcha"
-    },
-    "jsggzy": {
-      "primary": "http",
-      "note": "全国 ggzy 江苏切片 DEAL_PROVINCE=320000；省站 API 证书不稳时跳过"
+      "detail": "webbridge_after_human_captcha",
+      "timeout_sec": 55,
+      "retries": 3
     },
     "jiangsu_zhaobiao": {
       "primary": "http",
-      "list": "http Dqsearch 可匿名",
-      "login": "账号可选；滑块人工后 Cookie 回灌 data/sessions"
+      "warm": true,
+      "timeout_sec": 35,
+      "retries": 3,
+      "jsl_clearance": true
     }
   },
   "escalation": [

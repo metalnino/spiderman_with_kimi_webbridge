@@ -5,9 +5,10 @@ WORKDIR /app
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
+    TZ=Asia/Shanghai \
     LEDGER_HOST=0.0.0.0 \
     LEDGER_PORT=8765 \
-    CRAWL_INTERVAL_HOURS=2
+    CRAWL_CRON_HOURS=8,12,18,22
 
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt

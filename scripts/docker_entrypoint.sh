@@ -2,6 +2,9 @@
 set -e
 cd /app
 
+# 强制容器内上海时区（定时 8/12/18/22 以此为准）
+export TZ="${TZ:-Asia/Shanghai}"
+
 echo "[entry] migrate ops tables..."
 python scripts/migrate_ops.py || echo "[entry] migrate_ops warn (continue)"
 
@@ -13,12 +16,14 @@ LEDGER_PID=$!
 if [ "${CRAWL_ON_START:-0}" = "1" ]; then
   echo "[entry] crawl once on start..."
   python scripts/jobs/run_incremental.py --pages "${CRAWL_PAGES:-1}" || true
+  python scripts/jobs/build_crm_db.py || true
 fi
 
-HOURS="${CRAWL_INTERVAL_HOURS:-2}"
-echo "[entry] scheduler loop every ${HOURS}h (ledger pid=${LEDGER_PID})"
+SLOTS="${CRAWL_CRON_HOURS:-8,12,18,22}"
+echo "[entry] scheduler cron hours=${SLOTS} TZ=${TZ} (ledger pid=${LEDGER_PID})"
 exec python -c "
-from crawl.scheduler import start_interval_loop
+from crawl.scheduler import start_cron_loop, parse_slots
 import os
-start_interval_loop(hours=float(os.environ.get('CRAWL_INTERVAL_HOURS','2')))
+slots = parse_slots(os.environ.get('CRAWL_CRON_HOURS', '8,12,18,22'))
+start_cron_loop(slots, run_immediately=False)
 "

@@ -25,7 +25,7 @@ def seed_keywords_from_config() -> int:
             for kw in all_kw:
                 cur.execute(
                     "INSERT INTO keyword_state (keyword, enabled, group_name) VALUES (%s,1,%s) "
-                    "ON DUPLICATE KEY UPDATE group_name=VALUES(group_name)",
+                    "ON DUPLICATE KEY UPDATE enabled=1, group_name=VALUES(group_name)",
                     (kw, "active"),
                 )
                 n += 1

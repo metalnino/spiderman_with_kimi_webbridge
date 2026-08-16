@@ -1,4 +1,4 @@
-"""CRM from MySQL notices → entities table + HTML."""
+"""CRM from MySQL notices → entities table + HTML（主体名规范化 + 全国同名合并）."""
 from __future__ import annotations
 
 import json
@@ -19,6 +19,18 @@ from db import connect  # noqa: E402
 OUT_HTML = ROOT / "data" / "web" / "crm.html"
 CFG = json.loads((ROOT / "config" / "crm_config.json").read_text(encoding="utf-8"))
 
+# 合并用：去掉后比较的公司形态后缀（长的优先）
+_NORM_STRIP_SUFFIXES = (
+    "股份有限公司",
+    "有限责任公司",
+    "有限公司",
+    "集团有限公司",
+    "集团公司",
+    "集团",
+    "分公司",
+    "支公司",
+)
+
 
 def extract_entity(title: str) -> str | None:
     t = re.sub(r"\s+", "", title or "")
@@ -34,6 +46,28 @@ def extract_entity(title: str) -> str | None:
         if len(chunk) >= 4 and (best is None or len(chunk) > len(best)):
             best = chunk
     return best
+
+
+def normalize_entity_key(name: str) -> str:
+    """全国合并键：去空白/括号噪声，统一常见公司后缀。"""
+    s = (name or "").strip()
+    s = s.replace("（", "(").replace("）", ")")
+    s = re.sub(r"\s+", "", s)
+    s = re.sub(r"[\(（][^\)）]{0,40}[\)）]", "", s)
+    s = s.replace("株式会社", "").replace("有限责任", "有限")
+    for suf in _NORM_STRIP_SUFFIXES:
+        if s.endswith(suf) and len(s) > len(suf) + 2:
+            s = s[: -len(suf)]
+            break
+    return s.casefold()
+
+
+def pick_display_name(names: list[str]) -> str:
+    """展示名取最长且含「公司/院/局」等更完整写法。"""
+    uniq = [n for n in names if n]
+    if not uniq:
+        return ""
+    return sorted(uniq, key=lambda x: (len(x), x), reverse=True)[0]
 
 
 def parse_dt(s) -> datetime | None:
@@ -63,17 +97,34 @@ def main():
         conn.close()
 
     buckets: dict[str, list] = defaultdict(list)
+    name_variants: dict[str, list[str]] = defaultdict(list)
     for n in notices:
-        name = n.get("buyer") or extract_entity(n.get("title") or "")
-        if not name:
+        raw = (n.get("buyer") or "").strip() or extract_entity(n.get("title") or "")
+        if not raw:
             continue
-        buckets[name].append(n)
+        key = normalize_entity_key(raw)
+        if len(key) < 2:
+            continue
+        buckets[key].append(n)
+        name_variants[key].append(raw)
 
     entities = []
     conn = connect(autocommit=True)
     try:
         with conn.cursor() as cur:
-            for name, hist in buckets.items():
+            # 全国同名：唯一键改为仅 name，避免同名多城拆条
+            try:
+                cur.execute("ALTER TABLE entities DROP INDEX uk_name_city")
+            except Exception:
+                pass
+            try:
+                cur.execute("ALTER TABLE entities ADD UNIQUE KEY uk_name (name)")
+            except Exception:
+                pass
+            # 全量重建，去掉旧脏重复
+            cur.execute("DELETE FROM entities")
+            for key, hist in buckets.items():
+                name = pick_display_name(name_variants[key])[:256]
                 times = [parse_dt(h.get("publish_date") or h.get("created_at")) for h in hist]
                 times = sorted([t for t in times if t])
                 cities = [h.get("city") for h in hist if h.get("city")]
@@ -88,16 +139,21 @@ def main():
                     if gaps:
                         med = int(statistics.median(gaps))
                         next_hint = f"粗估间隔约{med}天；下次约{(last + timedelta(days=med)).date() if last else '-'}"
-                meta = {"notice_ids": [h["id"] for h in hist[:50]], "sources": list({h["source_id"] for h in hist})}
+                meta = {
+                    "notice_ids": [h["id"] for h in hist[:50]],
+                    "sources": list({h["source_id"] for h in hist}),
+                    "norm_key": key,
+                    "name_variants": sorted(set(name_variants[key]))[:20],
+                }
                 cur.execute(
                     "INSERT INTO entities (name, entity_type, city, province, notice_count, last_notice_at, next_bid_hint, meta_json) "
                     "VALUES (%s,'buyer',%s,%s,%s,%s,%s,%s) "
                     "ON DUPLICATE KEY UPDATE notice_count=VALUES(notice_count), last_notice_at=VALUES(last_notice_at), "
-                    "next_bid_hint=VALUES(next_bid_hint), meta_json=VALUES(meta_json), city=IFNULL(VALUES(city),city), "
-                    "province=IFNULL(VALUES(province),province)",
+                    "next_bid_hint=VALUES(next_bid_hint), meta_json=VALUES(meta_json), "
+                    "city=VALUES(city), province=VALUES(province)",
                     (
-                        name[:256],
-                        city,
+                        name,
+                        city or "",
                         province,
                         len(hist),
                         last.strftime("%Y-%m-%d %H:%M:%S") if last else None,
@@ -128,8 +184,8 @@ def main():
     html = f"""<!DOCTYPE html><html lang="zh-CN"><head><meta charset="utf-8"/><title>CRM主体</title>
 <style>body{{font-family:Microsoft YaHei,sans-serif;margin:24px}}table{{border-collapse:collapse;width:100%}}
 th,td{{border:1px solid #ddd;padding:8px;font-size:13px}}th{{background:#f3f4f6}}</style></head>
-<body><h1>CRM 主体（来自 notices）</h1><p>共 {len(entities)} 个主体</p>
-<table><thead><tr><th>主体</th><th>城市</th><th>公告数</th><th>最近公告</th><th>下次粗估</th></tr></thead>
+<body><h1>CRM 主体（规范化去重 / 全国同名合并）</h1><p>共 {len(entities)} 个主体</p>
+<table><thead><tr><th>主体</th><th>主城</th><th>公告数</th><th>最近公告</th><th>下次粗估</th></tr></thead>
 <tbody>{rows or '<tr><td colspan=5>暂无</td></tr>'}</tbody></table></body></html>"""
     OUT_HTML.parent.mkdir(parents=True, exist_ok=True)
     OUT_HTML.write_text(html, encoding="utf-8")

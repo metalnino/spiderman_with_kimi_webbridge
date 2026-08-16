@@ -9,6 +9,7 @@ from typing import Optional
 
 from crawl.config_loader import anti_bot_cfg
 from crawl import cookie_store
+from crawl.jsl_clearance import try_solve_521
 from crawl.warm_session import WARM_URLS
 
 UA = (
@@ -38,10 +39,11 @@ class HttpSession:
         ab = anti_bot_cfg()
         http = ab.get("http") or {}
         per = ((ab.get("per_source") or {}).get(source_id or "") or {})
-        self.timeout = int(http.get("timeout_sec") or 20)
-        self.retries = int(http.get("retries") or 2)
+        self.timeout = int(per.get("timeout_sec") or http.get("timeout_sec") or 40)
+        self.retries = int(per.get("retries") or http.get("retries") or 3)
         self.delay_min = int(per.get("delay_ms_min") or http.get("delay_ms_min") or 800) / 1000
         self.delay_max = int(per.get("delay_ms_max") or http.get("delay_ms_max") or 2200) / 1000
+        self.jsl_clearance = bool(per.get("jsl_clearance") or source_id == "jiangsu_zhaobiao")
         self._cookie_header: str | None = None
         if source_id:
             self.load_stored_cookies(source_id)
@@ -85,8 +87,24 @@ class HttpSession:
                     return resp.status, raw, final
             except urllib.error.HTTPError as e:
                 last = _http_error_label(e)
-                # 4xx 客户端错误通常重试无益；立即失败，交由上层按状态归类
-                if 400 <= e.code < 500:
+                body = b""
+                try:
+                    body = e.read()
+                except Exception:
+                    body = b""
+                # 江苏站等 CDN：先解一层 __jsl_clearance_s，再重试
+                if self.jsl_clearance and e.code == 521 and body:
+                    html = body.decode("utf-8", "ignore")
+                    if try_solve_521(html, self.cj, url):
+                        # 同步 header，后续请求带上 jar
+                        bits = [f"{c.name}={c.value}" for c in self.cj]
+                        if bits:
+                            self._cookie_header = "; ".join(bits)
+                            hdrs["Cookie"] = self._cookie_header
+                        time.sleep(0.3)
+                        continue
+                # 4xx 客户端错误通常重试无益（429/403 立即失败，交由上层归类）
+                if 400 <= e.code < 500 and e.code != 408:
                     break
                 time.sleep(0.5 * (i + 1))
             except Exception as e:  # noqa: BLE001
