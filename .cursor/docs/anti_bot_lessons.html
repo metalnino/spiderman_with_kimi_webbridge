@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>JSL 反爬实战总结：jiangsu 521 从解不开到通（含 cebpub 攻坚指引）</title>
+<style>
+:root{--bg:#f7f8fa;--card:#fff;--ink:#1f2329;--muted:#6b7280;--line:#e5e7eb;--accent:#0b5fff;--ok:#0d7a3f;--warn:#b45309;--err:#b91c1c;--code-bg:#111827;--code-ink:#e5e7eb}
+*{box-sizing:border-box}
+body{margin:0;font-family:"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);line-height:1.75}
+.wrap{max-width:960px;margin:0 auto;padding:0 20px 64px}
+header{background:linear-gradient(135deg,#111827,#1f2937);color:#fff;padding:36px 0 30px;margin-bottom:28px}
+header .wrap{padding-bottom:0}
+h1{margin:0 0 10px;font-size:26px;font-weight:700}
+header p{margin:0;color:#9ca3af;font-size:14px}
+h2{font-size:21px;margin:42px 0 14px;padding-left:12px;border-left:4px solid var(--accent)}
+h3{font-size:16px;margin:24px 0 10px;color:#111827}
+p{margin:10px 0}
+ul,ol{margin:8px 0;padding-left:24px}
+li{margin:5px 0}
+code{background:#eef1f6;border:1px solid var(--line);border-radius:4px;padding:1px 6px;font-family:Consolas,Menlo,monospace;font-size:13px}
+pre{background:var(--code-bg);color:var(--code-ink);border-radius:8px;padding:14px 16px;overflow-x:auto;font-size:13px;line-height:1.6;margin:12px 0}
+pre code{background:none;border:none;padding:0;color:inherit}
+table{border-collapse:collapse;width:100%;background:var(--card);margin:12px 0;border-radius:8px;overflow:hidden;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+th,td{border:1px solid var(--line);padding:9px 12px;font-size:13.5px;text-align:left;vertical-align:top}
+th{background:#f3f4f6;font-weight:600}
+.box{border-radius:8px;padding:14px 16px;margin:14px 0;border:1px solid;font-size:14px}
+.box.key{background:#eff6ff;border-color:#bfdbfe}
+.box.win{background:#ecfdf5;border-color:#a7f3d0}
+.box.warn{background:#fffbeb;border-color:#fde68a}
+.box.err{background:#fef2f2;border-color:#fecaca}
+.box .t{font-weight:700;display:block;margin-bottom:6px}
+.tag{display:inline-block;border-radius:4px;padding:0 7px;font-size:12px;font-weight:600;margin-right:6px}
+.tag.ok{background:#d1fae5;color:#065f46}
+.tag.err{background:#fee2e2;color:#991b1b}
+.tag.warn{background:#fef3c7;color:#92400e}
+.tag.info{background:#dbeafe;color:#1e40af}
+hr{border:none;border-top:1px solid var(--line);margin:30px 0}
+.toc{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:16px 20px;margin:18px 0;font-size:14px}
+.toc a{color:var(--accent);text-decoration:none}
+</style>
+</head>
+<body>
+<header><div class="wrap">
+<h1>JSL 反爬实战总结：jiangsu 521 从「解不开」到「通了」</h1>
+<p>一份可复用的攻坚文档 —— 供后续 jiangsu 迭代、以及 cebpub 等其它站点攻坚参考 · 2026-08-17</p>
+</div></header>
+
+<div class="wrap">
+
+<div class="toc"><b>目录</b>：
+<a href="#s1">1 问题背景</a> ·
+<a href="#s2">2 JSL 反爬机制全解（两阶段）</a> ·
+<a href="#s3">3 调试时间线与踩坑（含 3 个 bug）</a> ·
+<a href="#s4">4 可复用的验证技巧</a> ·
+<a href="#s5">5 最终方案：真实浏览器（WebBridge）</a> ·
+<a href="#s6">6 通用决策树</a> ·
+<a href="#s7">7 对 cebpub 的攻坚指引</a> ·
+<a href="#s8">8 附录：关键代码</a>
+</div>
+
+<h2 id="s1">1. 问题背景</h2>
+<p><b>现象</b>：<code>jiangsu.zhaobiao.cn</code> 的列表接口 <code>/psearch/Dqsearch</code> 返回 <b>HTTP 521</b>，纯 HTTP 抓不到任何数据。日志里一直是 <code>origin_down(HTTP 521)</code>。</p>
+<p><b>本质</b>：521 不是「服务器挂了」，而是 <b>JSL（加速乐）反爬的第一关</b>。这类反爬在政务/招采站点极其常见，cebpub、很多省市公共资源交易网都在用。</p>
+<div class="box key"><span class="t">核心认知</span>
+一个站点「能 HTTP 还是必须浏览器」，不是看它有没有 JS，而是看它的反爬在第几层：
+<ul>
+<li><b>简单混淆挑战</b>（一段可逆算的 JS）→ 纯 HTTP + 自写求解器可过；</li>
+<li><b>重度混淆 + 浏览器指纹校验</b> → 纯 HTTP 无解，必须真实浏览器。</li>
+</ul>
+</div>
+
+<h2 id="s2">2. JSL 反爬机制全解（两阶段）</h2>
+<h3>2.1 JSL 的工作原理</h3>
+<ol>
+<li>第一次请求 → 服务器返回 <b>521 + 一段混淆 JS + Set-Cookie</b>；</li>
+<li>浏览器执行 JS，算出 <code>__jsl_clearance_s</code> cookie，然后 <code>location.href</code> 自动刷新；</li>
+<li>服务器校验 cookie → 通过就放行内容，不通过继续 521。</li>
+</ol>
+
+<h3>2.2 阶段一：简单「字符拼接」挑战（HTTP 可解）</h3>
+<p>第一阶段 521 页面的 JS 长这样（这是抓到的真实样本）：</p>
+<pre><code>document.cookie = ('_')+('_')+('j')+('s')+('l')+('_')+('c')+('l')+('e')+('a')+('r')+('a')+('n')+('c')+('e')+('_')+('s')+('=')
+  + (-~[]+'') + (2+5+'') + (1+7+'') + (6+'') + ... // 混淆算术
+;location.href = location.pathname + location.search</code></pre>
+<p>它用 JS 的隐式类型转换把一堆混淆表达式拼成 cookie 字符串，例如：</p>
+<table>
+<tr><th>混淆写法</th><th>JS 真值</th><th>说明</th></tr>
+<tr><td><code>-~[]</code></td><td>1</td><td>~[] = -1，取负 = 1</td></tr>
+<tr><td><code>~~{}</code></td><td>0</td><td>对象转数字为 NaN，两次取反变 0</td></tr>
+<tr><td><code>1+[0]</code></td><td>"10"</td><td>数组转字符串后拼接</td></tr>
+<tr><td><code>[2]*3</code></td><td>6</td><td>数组先转 "2" 再乘</td></tr>
+<tr><td><code>1+[2]&gt;&gt;2</code></td><td>3</td><td>"12" 右移 2 位（注意优先级！见 3.1）</td></tr>
+</table>
+
+<h3>2.3 阶段二：重度混淆挑战（必须真浏览器）</h3>
+<p>通过阶段一后，服务器返回<b>第二段</b>更狠的混淆 JS：</p>
+<pre><code>&lt;script&gt;var _0xe5ed=['wp3Cu8K/Nw==','wqsww6fDmg==','ZyfCgsKu', ...]; // 超长 base64 数组 + 解码器</code></pre>
+<p>这段代码带 <code>setTimeout</code> 延时、多重解码，并且会<b>检测浏览器环境</b>（headless、webdriver 标志、指纹）。Playwright 无头浏览器在这里<b>卡死 45 秒页面空白</b>，而真实浏览器 6 秒自动过完。</p>
+
+<h3>2.4 Cookie 机制（缺一不可）</h3>
+<table>
+<tr><th>Cookie</th><th>来源</th><th>说明</th></tr>
+<tr><td><code>__jsluid_s</code></td><td>521 响应的 Set-Cookie</td><td>服务器种的 uid，HttpOnly+Secure+SameSite=None</td></tr>
+<tr><td><code>__jsl_clearance_s</code></td><td>浏览器算出来的</td><td>通行证，<b>两个必须一起回传</b></td></tr>
+</table>
+<p><code>__jsl_clearance_s</code> 的值格式：<code>&lt;Unix时间戳&gt;.&lt;毫秒&gt;|-1|&lt;URL编码的base64(sha1)&gt;</code>，真实样本：</p>
+<pre><code>__jsl_clearance_s=1786991335.977|-1|QnM%2FuSpL2biyuTlklvFPre3gKX4%3D</code></pre>
+
+<h2 id="s3">3. 调试时间线与踩坑（3 个 bug）</h2>
+<table>
+<tr><th>#</th><th>现象</th><th>根因</th><th>修复</th></tr>
+<tr>
+<td>1</td>
+<td>解出的 cookie 值 <code>%3D</code> 算成 <code>%1D</code>，服务器不认</td>
+<td><b>JS 运算符优先级错</b>：JS 里 <code>&gt;&gt;</code> 优先级低于 <code>+</code>，<code>1+[2]&gt;&gt;2</code> 应算 <code>(1+[2])&gt;&gt;2</code>=3，自写求解器却先拆 <code>+</code>，算成 <code>1+([2]&gt;&gt;2)</code>=1</td>
+<td>拆分顺序改为 <code>| &lt; ^ &lt; &lt;&lt;,&gt;&gt; &lt; +,- &lt; *,/</code>（低优先级先拆）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>cookie 算对了还是 521</td>
+<td>只回传了 <code>__jsl_clearance_s</code>，漏了 521 响应 Set-Cookie 种的 <code>__jsluid_s</code></td>
+<td>确认 CookieJar 自动收下 Set-Cookie，两个一起回传</td>
+</tr>
+<tr>
+<td>3</td>
+<td>两个 cookie 全对（Node 验证一致）仍然 521</td>
+<td><b>服务器校验的是浏览器指纹，不只是 cookie</b></td>
+<td>放弃纯 HTTP，转真实浏览器（WebBridge）</td>
+</tr>
+</table>
+
+<div class="box err"><span class="t">最重要的转折（认知升级）</span>
+即使用 Node.js（真 JS 引擎）验证求解结果 100% 一致、两个 cookie 全部回传，服务器依然 521。这说明 JSL 两阶段的校验对象是<b>浏览器环境本身</b>（TLS 指纹 / webdriver 标志 / JS 执行特征），纯 HTTP 无论 cookie 多正确都过不去。别在 HTTP 上死磕。</div>
+
+<h2 id="s4">4. 可复用的验证技巧</h2>
+<ol>
+<li><b>用 Node.js 验证 JS 表达式</b>：<code>node -e "console.log(&lt;混淆表达式&gt;)"</code>，和你的求解器输出逐位对比。这就是发现优先级 bug 的方法。</li>
+<li><b>看 521 的 Set-Cookie 头</b>：反爬第一步往往先种 uid cookie，必须回传。</li>
+<li><b>识别多阶段</b>：第二次 521 的 HTML 里出现 <code>var _0x...</code> 这种 base64 数组混淆 → 阶段二 → 直接上真浏览器，别浪费时间。</li>
+<li><b>结果行结构要实地抓</b>：jiangsu 结果行是 <code>[类型][标题][行业][地区][日期]</code>，日期在<b>行内独立字段</b>，不在标题里。靠猜标题格式会全错。</li>
+<li><b>无头浏览器会被识别</b>：Playwright headless 过不了阶段二；本机真 Chrome（WebBridge 走 Kimi 扩展的浏览器）能过。</li>
+<li><b>写代码的转义坑</b>：通过模板写代码时，<code>s</code>/<code>d</code>/<code>/</code> 的反斜杠会被吞掉变成 <code>s</code>/<code>d</code>/<code>/</code>，正则直接坏。写完用 <code>repr()</code> 验证文件真实内容。</li>
+</ol>
+
+<h2 id="s5">5. 最终方案：真实浏览器（WebBridge）</h2>
+<p>jiangsu 的最终爬虫是 <code>scripts/crawl_jiangsu_wb.py</code>（本机运行，需 Kimi 浏览器扩展连接）：</p>
+<pre><code>流程：
+1. webbridge navigate 到 /psearch/Dqsearch?queryword=关键词
+2. 轮询等待（JSL 两阶段由真浏览器自动解 + 自动重载 + 渲染，约 6~10 秒）
+3. evaluate 提取结果行：a[href 含 _v_[16位hex].html] + 行文本
+4. 解析 标题/发布时间/地区（行内 [类型][标题][行业][地区][日期]）
+5. 过滤：8 城 + 发布时间范围（与 HTTP 流程一致）
+6. upsert 写 MySQL</code></pre>
+<div class="box win"><span class="t">成果</span>
+关键词「绿植租摆」一次抓到 <b>40 条</b>，日期全部为 2026-07-24 ~ 08-17；经 8 城过滤后 <b>11 条</b>（南京/苏州等）。NAS 上的 HTTP 定时任务把 jiangsu 标记 <code>method=webbridge</code> 停用，避免每轮白跑 521。</div>
+
+<h2 id="s6">6. 通用决策树（适用于任何站点）</h2>
+<pre><code>站点能不能爬？
+├─ 纯 HTTP 直接拿到数据 ──────────────→ HTTP 爬（最快最省）
+├─ HTTP 返回 521 / 403 / 验证码：
+│   ├─ 521 页是「字符拼接」简单挑战 ──→ 试纯 HTTP 求解器（jsl_clearance 思路）
+│   │     └─ cookie 回传仍被拒 ───────→ 浏览器指纹校验 → 真浏览器
+│   ├─ 521 页是「var _0x 数组」重混淆 ──→ 阶段二 → 直接真浏览器
+│   └─ 登录墙 / 付费墙 ───────────────→ 需要账号 Cookie（记录保留，等账号）
+└─ 真浏览器 = 本机 WebBridge（Kimi 扩展）优先；无头 Playwright 只做渲染不碰反爬
+</code></pre>
+
+<h2 id="s7">7. 对 cebpub 的攻坚指引（下一步就用）</h2>
+<p>cebpub 现状：搜索页 JS 渲染 + DES 加密；Playwright 渲染和提取都通了（每页 15 条），但<b>关键词 searchName 没传进请求</b>，返回全量 72 万条。</p>
+<p>按本文件的验证技巧，攻坚步骤：</p>
+<ol>
+<li>Playwright 打开 <code>getSearch.do</code>，<code>page.fill("#keySearchValue", 词)</code>；</li>
+<li>直接 <code>page.evaluate("getSearchParams()")</code> 看关键词在不在返回数组里 —— <b>先确认填词是否生效</b>；</li>
+<li>监听 <code>getStringMethod.do</code>（加密接口）的 POST body，看 <code>searchName=</code> 是否带值 —— 定位关键词在哪一环丢的；</li>
+<li>若页面 JS 读不到填的词：换 <code>page.type</code> 逐字输入 / 直接 <code>$("#keySearchValue").val(词)</code> 再触发 <code>query()</code>；</li>
+<li>若加密后 searchName 依旧为空：找 <code>query()</code> 里关键词变量到 POST 参数的映射（页面 JS 里必然留着映射代码）；</li>
+<li>若最终仍是「加密+指纹」双墙 → 和 jiangsu 一样，cebpub 走<b>真实浏览器（WebBridge）</b>让页面自己加密。</li>
+</ol>
+
+<h2 id="s8">8. 附录：关键代码</h2>
+<h3>8.1 jsl_clearance.py 的优先级修复（阶段一求解器）</h3>
+<pre><code># 修复前（错）：先拆 + 再拆 >>
+for ops in (("|",), ("^",), ("+", "-"), ("*", "/"), ("&lt;&lt;", "&gt;&gt;")):
+# 修复后（对）：JS 优先级 | &lt; ^ &lt; &lt;&lt;,&gt;&gt; &lt; +,- &lt; *,/
+for ops in (("|",), ("^",), ("&lt;&lt;", "&gt;&gt;"), ("+", "-"), ("*", "/")):</code></pre>
+
+<h3>8.2 阶段识别特征</h3>
+<pre><code>阶段一特征：document.cookie = ('_')+('_')+... ; location.href = ...
+阶段二特征：var _0xe5ed=['wp3Cu8K/Nw==',...] （base64 数组 + 解码器 + setTimeout）</code></pre>
+
+<hr>
+<p style="color:var(--muted);font-size:13px">本文档由实战调试过程沉淀而来，供 jiangsu 后续迭代与其它站点（cebpub 等）攻坚复用。关键词：JSL / 加速乐 / HTTP 521 / 两阶段反爬 / WebBridge / 真浏览器 / 无头检测 / 运算符优先级 / Node 验证。</p>
+</div>
+</body>
+</html>

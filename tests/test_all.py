@@ -176,13 +176,13 @@ class TestLedgerAPI(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertIn("province_city", body)
-        # 启用源站（HTTP 爬）：ccgp/chinabidding/jiangsu；ggzy/jsggzy/cebpub 已停用(WebBridge 或弃用)
+        # 启用源站（HTTP 爬）：ccgp/chinabidding；ggzy/jsggzy/cebpub/jiangsu 已停用(WebBridge 或弃用)
         self.assertIn("ccgp", body["sources"])
         self.assertIn("chinabidding", body["sources"])
-        self.assertIn("jiangsu_zhaobiao", body["sources"])
         self.assertNotIn("ggzy", body["sources"])
         self.assertNotIn("jsggzy", body["sources"])
         self.assertNotIn("cebpub", body["sources"])
+        self.assertNotIn("jiangsu_zhaobiao", body["sources"])
 
     def test_notices_limit(self):
         r = self.client.get("/api/notices", params={"limit": "5"})

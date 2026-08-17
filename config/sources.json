@@ -52,13 +52,11 @@
     "note": "未配置 Cookie 时仅列表；配置后可尝试详情字段"
   },
   "jiangsu_zhaobiao": {
-    "enabled": true,
+    "enabled": false,
     "name": "江苏招标网",
     "home": "https://jiangsu.zhaobiao.cn/",
     "search_api": "https://jiangsu.zhaobiao.cn/psearch/Dqsearch",
-    "login_page": "https://user.zhaobiao.cn/login.html",
-    "login_required": true,
-    "cred_env": ["JIANGSU_ZHAOBIAO_USER", "JIANGSU_ZHAOBIAO_PASS"],
-    "note": "列表可匿名；登录含滑块验证码，失败则 captcha_todos + Cookie 回灌"
+    "method": "webbridge",
+    "note": "JSL 两阶段反爬(521)，纯HTTP/无头浏览器均过不去；走本机 WebBridge 真浏览器 scripts/crawl_jiangsu_wb.py"
   }
 }

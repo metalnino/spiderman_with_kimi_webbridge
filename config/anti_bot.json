@@ -77,11 +77,10 @@
       "retries": 3
     },
     "jiangsu_zhaobiao": {
-      "primary": "http",
-      "warm": true,
+      "primary": "webbridge",
+      "note": "JSL 两阶段反爬需真浏览器（详见 .cursor/docs/anti_bot_lessons.html）",
       "timeout_sec": 35,
-      "retries": 3,
-      "jsl_clearance": true
+      "retries": 3
     }
   },
   "escalation": [

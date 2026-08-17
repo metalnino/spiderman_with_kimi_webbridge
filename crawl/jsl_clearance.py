@@ -114,8 +114,8 @@ def _js_numish(expr: str):
             return 1 if not _js_numish(e[2:]) else 0
         return _js_numish(e[1:])
 
-    # operators by precedence (lowest first when splitting from right)
-    for ops in (("|",), ("^",), ("+", "-"), ("*", "/"), ("<<", ">>")):
+    # JS 运算符优先级（从低到高）：| < ^ < <<,>> < +,- < *,/  （>> 比 + 低，故先拆 >>）
+    for ops in (("|",), ("^",), ("<<", ">>"), ("+", "-"), ("*", "/")):
         sp = _split_top(e, ops)
         if not sp:
             continue
