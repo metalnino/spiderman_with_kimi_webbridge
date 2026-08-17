@@ -83,7 +83,12 @@ def extract_results() -> list[dict]:
     for it in raw:
         m = re.search(r"urlOpen\('([0-9a-fA-F]{16,})'\)", it.get("href") or "")
         if m and len(it.get("title") or "") >= 4:
-            items.append({"uuid": m.group(1), "title": it["title"]})
+            title = it["title"]
+            pub = None
+            dm = re.search(r"(20\d{2}[-/.]\d{1,2}[-/.]\d{1,2})", title)
+            if dm:
+                pub = dm.group(1).replace("/", "-").replace(".", "-")
+            items.append({"uuid": m.group(1), "title": title, "publish_date": pub})
     return items
 
 
@@ -118,6 +123,7 @@ def main(keywords: list[str] | None = None) -> None:
                         source_name="中国招标投标公共服务平台",
                         external_id=it["uuid"],
                         title=it["title"],
+                        publish_date=it.get("publish_date"),
                         city=match_city(it["title"]),
                         keyword=kw,
                         detail_url=DETAIL_TPL.format(uuid=it["uuid"]),

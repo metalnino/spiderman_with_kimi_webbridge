@@ -71,7 +71,7 @@ a:hover{text-decoration:underline}
     <button class="secondary" id="lExport">导出CSV</button>
   </div>
   <table><thead><tr>
-    <th>已读</th><th>NEW</th><th>源站</th><th>城市</th><th>处理状态</th><th>金额</th><th>金额确认</th><th>标题 / 招标人</th><th>发现时间</th><th>备注</th>
+    <th>已读</th><th>NEW</th><th>源站</th><th>城市</th><th>处理状态</th><th>金额</th><th>金额确认</th><th>标题 / 招标人</th><th>发布时间</th><th>发现时间</th><th>备注</th>
   </tr></thead><tbody id="leadBody"></tbody></table>
   <div class="pager"><button class="secondary" id="lPrev">上一页</button><span id="lPage" class="hint"></span><button class="secondary" id="lNext">下一页</button></div>
 </section>
@@ -211,10 +211,11 @@ async function loadLeads() {
       + '<td>'+fmtAmount(r)+'</td>'
       + '<td>'+leadSelect(r.amount_status||(r.amount!=null?'待确认':'无金额'), AMOUNT_STATUSES, 'lead-sel', r.id, 'amount')+'</td>'
       + '<td>'+hlTitle(r.title, r.keyword)+buyer+' <br><small class="hint">'+links.join(' · ')+'</small></td>'
+      + '<td>'+esc(r.publish_date||'-')+'</td>'
       + '<td>'+esc(r.created_at)+'</td>'
       + '<td><input class="remark" data-id="'+r.id+'" data-act="remark" value="'+esc(r.remark||'')+'" placeholder="备注"/></td>'
       + '</tr>';
-  }).join('') || '<tr><td colspan=10>暂无数据</td></tr>';
+  }).join('') || '<tr><td colspan=11>暂无数据</td></tr>';
   document.getElementById('lPage').textContent = '共 '+d.total+' · offset '+d.offset;
   document.getElementById('lPrev').disabled = lOffset <= 0;
   document.getElementById('lNext').disabled = lOffset + PAGE >= d.total;

@@ -136,6 +136,12 @@ class JiangsuZhaobiaoSource(BaseSource):
             title = re.sub(r"\s+", " ", title).strip()
             if len(title) < 6:
                 continue
+            # 发布时间：标题尾部的 (YYYY-MM-DD [HH:MM[:SS]])
+            pub = None
+            mp = re.search(r"[（(]\s*(20\d{2}[-/.]\d{1,2}[-/.]\d{1,2}(?:[ T]\d{1,2}:\d{1,2}(?::\d{1,2})?)?)\s*[)）]\s*$", title)
+            if mp:
+                pub = mp.group(1).replace("/", "-").replace(".", "-")[:19]
+                title = title[:mp.start()].strip()
             city = self.match_city(title, "江苏")
             notices.append(
                 Notice(
@@ -143,6 +149,7 @@ class JiangsuZhaobiaoSource(BaseSource):
                     source_name=self.source_name,
                     external_id=f"{kind}_{ext}",
                     title=title,
+                    publish_date=pub,
                     province="江苏",
                     city=city,
                     region_text="江苏",
