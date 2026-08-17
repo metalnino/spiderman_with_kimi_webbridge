@@ -43,3 +43,8 @@ def target_city_names() -> list[str]:
 
 def only_target_cities() -> bool:
     return bool(crawl_cfg().get("only_target_cities"))
+
+
+def publish_date_range() -> tuple[str | None, str | None]:
+    r = crawl_cfg().get("publish_date_range") or {}
+    return r.get("start"), r.get("end")

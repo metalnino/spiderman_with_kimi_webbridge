@@ -84,7 +84,7 @@ class CcgpSource(BaseSource):
                     external_id=str(ext),
                     title=title,
                     publish_date=pub,
-                    city=self.match_city(title),
+                    city=self.match_city((buyer or "") + " " + title),
                     keyword=kw,
                     buyer=buyer,
                     detail_url=href,

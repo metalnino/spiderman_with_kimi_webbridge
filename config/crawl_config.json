@@ -148,6 +148,10 @@
     }
   ],
   "only_target_cities": true,
+  "publish_date_range": {
+    "start": "2026-07-01",
+    "end": "2026-08-31"
+  },
   "notes": {
     "area_granularity": "站点 area 仅为省级；城市靠标题/正文二次匹配",
     "city_filter_mode": "province_then_title",

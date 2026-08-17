@@ -16,3 +16,4 @@
 | 2026-08-14 | 详情字段抓取起步：crawl/detail.py 新增 ccgp 详情 HTTP 解析（金额/招标人/代理/项目编号）并接入 runner 回填；探针确认 ggzy=JS壳、jiangsu=Cloudflare、cebpub=验证码、chinabidding=登录墙（待接入）；unittest 27/27 |
 | 2026-08-16 | 两路合并并 NAS 部署：接入 jiangsu HTTP 521 的 __jsl_clearance_s 纯 HTTP 解；定时改固定时刻 8/12/18/22 东八区；CRM 主体规范化全国合并(uk_name)；SSH 重建镜像验证 healthy |
 | 2026-08-16 | 台账后端换 FastAPI（api.py + uvicorn，契约不变/自动 /docs）；源站精简为 4 站（停用 ggzy/jsggzy，代码保留）；Dockerfile 用清华 PyPI 镜像 |
+| 2026-08-17 | 本机并行重跑(绿植租摆/8城/7-8月)：ccgp 可用但 8城+7-8月交集极少；加发布时间范围过滤；cebpub Playwright 渲染+提取已通、关键词过滤未通(加密搜索 searchName 未传)；chinabidding info_search 超时；jiangsu 521(JSL 未解)。以上为待修项 |

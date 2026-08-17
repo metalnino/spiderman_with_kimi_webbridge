@@ -3,7 +3,7 @@ from __future__ import annotations
 import os
 
 from crawl.captcha_queue import open_todo
-from crawl.config_loader import anti_bot_cfg, only_target_cities, sources_cfg, target_city_names
+from crawl.config_loader import anti_bot_cfg, only_target_cities, publish_date_range, sources_cfg, target_city_names
 from crawl.db_store import finish_run, start_run, upsert_notices
 from crawl.keywords import enabled_keywords
 from crawl.pipeline.apply_clean import refresh_clean_status
@@ -22,6 +22,17 @@ def _max_keywords_per_run() -> int:
             pass
     ab = anti_bot_cfg()
     return int(((ab.get("http") or {}).get("max_keywords_per_run")) or 0)
+
+
+def _in_pub_range(pub, pmin: str | None, pmax: str | None) -> bool:
+    if not pub:
+        return True  # 无日期不因范围丢弃
+    d = str(pub)[:10]
+    if pmin and d < pmin:
+        return False
+    if pmax and d > pmax:
+        return False
+    return True
 
 
 def _max_detail_per_run() -> int:
@@ -48,6 +59,9 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
         if only_target_cities():
             targets = set(target_city_names())
             notices = [n for n in notices if (n.city or "") in targets]
+        pmin, pmax = publish_date_range()
+        if pmin or pmax:
+            notices = [n for n in notices if _in_pub_range(n.publish_date, pmin, pmax)]
         stats = upsert_notices(notices)
         clean_stats = refresh_clean_status(limit=max(200, stats["attempted"] * 3))
         detail_stats = enrich_source_details(source_id, limit=_max_detail_per_run())
