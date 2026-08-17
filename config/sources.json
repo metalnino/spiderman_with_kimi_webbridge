@@ -1,6 +1,6 @@
 {
   "defaults": {
-    "trial_keywords": ["绿植租摆", "花卉租摆"],
+    "trial_keywords": ["绿植租摆"],
     "delay_ms_min": 800,
     "delay_ms_max": 2200,
     "max_pages_per_keyword": 1,

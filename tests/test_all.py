@@ -298,6 +298,13 @@ class TestDBOps(unittest.TestCase):
                 self.assertEqual(row["clean_status"], "drop")
         finally:
             conn.close()
+        # 测试夹具清理：不污染生产库
+        conn = connect(autocommit=True)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM notices WHERE external_id=%s", ("pytest-clean-1",))
+        finally:
+            conn.close()
 
     def test_dashboard(self):
         from crawl.dashboard import build_dashboard
@@ -311,6 +318,16 @@ class TestDBOps(unittest.TestCase):
 
 
 class TestDetail(unittest.TestCase):
+    def test_ccgp_deadline_normalization(self):
+        from crawl.detail import _cn_date_to_iso, parse_ccgp_detail
+
+        self.assertEqual(_cn_date_to_iso("2026年08月18日 09:00"), "2026-08-18 09:00:00")
+        self.assertEqual(_cn_date_to_iso("2026年8月2日"), "2026-08-02 00:00:00")
+        self.assertIsNone(_cn_date_to_iso("2026-08-18 09:00"))
+        html = "<html>投标截止时间：2026年08月18日 09:00</html>"
+        out = parse_ccgp_detail(html)
+        self.assertEqual(out["deadline"], "2026-08-18 09:00:00")
+
     def test_parse_ccgp_detail(self):
         from crawl.detail import parse_ccgp_detail
 
@@ -357,6 +374,13 @@ class TestWorkbench(unittest.TestCase):
         self.assertEqual(row["lead_status"], "跟进中")
         self.assertEqual(row["amount_status"], "已确认")
         self.assertEqual(row["remark"], "重点跟进")
+        # 测试夹具清理：不污染生产库
+        conn = connect(autocommit=True)
+        try:
+            with conn.cursor() as cur:
+                cur.execute("DELETE FROM notices WHERE external_id=%s", ("pytest-lead-1",))
+        finally:
+            conn.close()
 
     def test_export_csv_header(self):
         from crawl.ledger_data import export_csv

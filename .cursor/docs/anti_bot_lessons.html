@@ -242,12 +242,13 @@ hr{border:none;border-top:1px solid var(--line);margin:30px 0}
 <li>实网验证：修复后 chinabidding 7.9s 内 status=success、3 条入库。</li>
 </ul>
 
-<h3>10.3 通用铁律（适用于任何源站）</h3>
-<div class="box key"><span class="t">三条兜底原则</span>
+<h3>9.3 通用铁律（适用于任何源站）</h3>
+<div class="box key"><span class="t">四条兜底原则</span>
 <ol>
 <li><b>部分结果必须保留</b>：异常抛 <code>SourceError(partial=…)</code>，runner 拿到 partial 照样入库，status=partial 而不是 failed。</li>
 <li><b>0 条要能自证</b>：crawl_runs.note 记录 raw/city_drop/date_drop；页面有结果链接但解析 0 条时打印版面变化预警。</li>
 <li><b>频控靠等不靠轰</b>：冷却阶梯 + 调度槽天然重试；任何重试都有次数上限，避免把临时封禁打成永久封禁。</li>
+<li><b>事后补课</b>：① 词库收窄必须「config.active + DB keyword_state」两层同步，否则 seed 会把 16 个词重新启用、爬出规格外数据；② 详情回填的中文日期（2026年08月18日 09:00）必须规整成 DATETIME 再写库，否则整轮 1292 崩溃；③ 测试夹具必须自清理，否则混进生产线索表。</li>
 </ol></div>
 
 <h2 id="s10">10. 附录：关键代码</h2>

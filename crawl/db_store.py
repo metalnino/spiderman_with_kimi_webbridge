@@ -64,6 +64,12 @@ def start_run(source_id: str) -> int:
     conn = connect(autocommit=True)
     try:
         with conn.cursor() as cur:
+            # 上一轮异常中断会遗留 status=running 的僵尸记录：先标记为中断，保证状态可闭环
+            cur.execute(
+                "UPDATE crawl_runs SET finished_at=%s, status='failed', note='orphaned: 进程中断未闭环' "
+                "WHERE source_id=%s AND status='running'",
+                (datetime.now().strftime("%Y-%m-%d %H:%M:%S"), source_id),
+            )
             cur.execute(
                 "INSERT INTO crawl_runs (source_id, started_at, status, item_count) "
                 "VALUES (%s, %s, %s, 0)",

@@ -45,6 +45,16 @@ def _amount(text: str) -> tuple[float | None, str | None]:
     return num, amount_text
 
 
+def _cn_date_to_iso(s: str) -> str | None:
+    """中文日期规整为 MySQL DATETIME 可接受格式；规整不了返回 None。"""
+    m = re.search(r"(20\d{2})年(\d{1,2})月(\d{1,2})日(?:[^\d]{0,4}(\d{1,2}):(\d{2}))?", s)
+    if not m:
+        return None
+    y, mo, d = m.group(1), m.group(2).zfill(2), m.group(3).zfill(2)
+    hh, mm = m.group(4) or "00", m.group(5) or "00"
+    return f"{y}-{mo}-{d} {hh}:{mm}:00"
+
+
 def parse_ccgp_detail(html: str) -> dict:
     """解析 ccgp.gov.cn 详情页（开放、无验证码）。"""
     t = _plain(html)
@@ -64,7 +74,14 @@ def parse_ccgp_detail(html: str) -> dict:
     if amount is not None:
         out["amount"] = amount
         out["amount_text"] = amount_text
-    first([r"(?:投标截止时间|提交投标文件截止时间|开标时间|响应文件提交截止时间)[:：]\s*([\d\-年月日 :]{8,30})"], "deadline")
+    m = re.search(r"(?:投标截止时间|提交投标文件截止时间|开标时间|响应文件提交截止时间)[:：]\s*([\d\-年月日 :]{8,30})", t)
+    if m:
+        raw = m.group(1).strip()
+        iso = _cn_date_to_iso(raw)
+        if iso:
+            out["deadline"] = iso
+        elif re.fullmatch(r"20\d{2}[-/]\d{1,2}[-/]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2})?)?", raw):
+            out["deadline"] = raw[:19].replace("/", "-")
     return out
 
 
