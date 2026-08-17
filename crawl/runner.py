@@ -103,3 +103,25 @@ def run_incremental(*, sources: list[str] | None = None, max_pages: int = 1) -> 
         print(f"[run] {sid} -> {r.get('status')} attempted={r.get('attempted')} err={r.get('error')}", flush=True)
         results.append(r)
     return results
+
+
+def run_sources_parallel(
+    sources: list[str],
+    *,
+    keywords: list[str],
+    max_pages: int = 1,
+    max_workers: int = 4,
+) -> dict:
+    """并行跑多个源站（线程池，I/O 密集）。返回 {source_id: result}。"""
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    results: dict = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as ex:
+        futs = {ex.submit(run_source, sid, keywords=keywords, max_pages=max_pages): sid for sid in sources}
+        for fut in as_completed(futs):
+            sid = futs[fut]
+            try:
+                results[sid] = fut.result()
+            except Exception as e:  # noqa: BLE001
+                results[sid] = {"source_id": sid, "status": "error", "error": str(e)[:300]}
+    return results

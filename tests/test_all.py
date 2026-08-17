@@ -377,6 +377,19 @@ class TestWorkbench(unittest.TestCase):
             self.assertFalse(any(k["keyword"] == "测试词XYZ" for k in keywords.all_keywords()))
 
 
+class TestParallel(unittest.TestCase):
+    def test_parallel_runner(self):
+        from crawl import runner
+
+        with mock.patch.object(
+            runner, "run_source",
+            side_effect=lambda sid, **kw: {"source_id": sid, "status": "success", "attempted": 1},
+        ):
+            results = runner.run_sources_parallel(["ccgp", "chinabidding"], keywords=["绿植租摆"], max_workers=2)
+        self.assertEqual(set(results), {"ccgp", "chinabidding"})
+        self.assertTrue(all(r["status"] == "success" for r in results.values()))
+
+
 class TestEntry(unittest.TestCase):
     def test_run_incremental_entry_imports(self):
         """主增量入口 import 链必须可用（曾因 build_incremental_html 拼错而崩）。"""
