@@ -197,7 +197,29 @@ hr{border:none;border-top:1px solid var(--line);margin:30px 0}
 </ol>
 <p>最终 cebpub 用 Playwright 无头 + <code>performSearchRequest(null)</code> 即通：关键词过滤正确，每页 15 条，经 8 城+7-8月过滤入库 5 条。</p>
 
-<h2 id="s8">8. 附录：关键代码</h2>
+<h2 id="s8">8. ccgp 与 chinabidding 复盘</h2>
+
+<h3>8.1 ccgp：频控极敏感，且「绿植租摆」数据本身稀疏</h3>
+<table>
+<tr><th>发现</th><th>说明</th></tr>
+<tr><td><b>频控封页</b></td><td>探测太频繁会返回 2.7KB 拦截页，标题「频繁访问!中国政府采购网」，正文「您的访问过于频繁」。特征是页面极小、无任何结果结构。</td></tr>
+<tr><td><b>城市匹配</b></td><td>搜索结果的标题常不含城市，但「采购人（买家名）」常带城市（如「金华市金东区…」）→ 城市匹配应搜「买家+标题」，已改。</td></tr>
+<tr><td><b>8城+7-8月=0 的真实原因</b></td><td>数据稀疏：7-8 月的绿植租摆公告分布在长沙/金华/南昌/吉林等非目标城市；8 城内的在 4 月。不是爬虫 bug。</td></tr>
+</table>
+<div class="box warn"><span class="t">ccgp 使用纪律</span>
+必须慢爬（每请求 2.5~5 秒延迟）+ 暖会话拿 Cookie；<b>严禁连续探测</b>（触发频控要等恢复）。被封时宁可少抓一轮，不要重试轰炸。</div>
+
+<h3>8.2 chinabidding：接口超时是「临时抖动」，不是坏了</h3>
+<p>现象：<code>info_search</code> 一度超时、JSON 解析失败。复盘后发现：</p>
+<ol>
+<li>同时间首页（592KB）、搜索页（39KB）、info_search 接口<b>全部 200 且亚秒级返回</b>——说明超时是暂时的接口抖动，不是站点封禁；</li>
+<li>响应结构：<code>relatedList[]</code>，每项含 <code>area_id</code>(省码)/<code>publish_date</code>/<code>title</code>/<code>url</code>；城市在标题里；</li>
+<li>恢复后正常抓到 15 条「绿植租摆」，经 8 城+7-8月过滤入库 3 条。</li>
+</ol>
+<div class="box key"><span class="t">通用经验（任何源站突然失败时）</span>
+先做「基础可达性三角探测」：首页 / 搜索页 / 数据接口各打一次，看是全站挂、还是单个接口抖动。是抖动就等它恢复，别急着大改代码。</div>
+
+<h2 id="s9">9. 附录：关键代码</h2>
 <h3>8.1 jsl_clearance.py 的优先级修复（阶段一求解器）</h3>
 <pre><code># 修复前（错）：先拆 + 再拆 >>
 for ops in (("|",), ("^",), ("+", "-"), ("*", "/"), ("&lt;&lt;", "&gt;&gt;")):
