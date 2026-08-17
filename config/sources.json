@@ -33,10 +33,11 @@
     "rp": 15
   },
   "cebpub": {
-    "enabled": true,
+    "enabled": false,
     "name": "中国招标投标公共服务平台",
     "list_url": "https://bulletin.cebpubservice.com/xxfbcmses/search/bulletin.html",
-    "note": "P0 全国词检索；详情验证码后置"
+    "method": "webbridge",
+    "note": "搜索已改 JS 渲染+加密(getSearch.do)，HTTP 不可用；走 WebBridge 浏览器爬(本机 scripts/crawl_cebpub_wb.py)"
   },
   "jsggzy": {
     "enabled": false,

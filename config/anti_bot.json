@@ -71,7 +71,7 @@
       "delay_ms_max": 5000
     },
     "cebpub": {
-      "list": "http",
+      "list": "webbridge",
       "detail": "webbridge_after_human_captcha",
       "timeout_sec": 55,
       "retries": 3
