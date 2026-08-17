@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import random
 import re
 import sys
 import time
@@ -35,6 +36,23 @@ EXTRACT_JS = r"""(() => {
               row: (row && row.innerText || '').replace(/\s+/g,' ')});
   });
   return JSON.stringify(out);
+})()"""
+
+
+def human_pause(min_s: float = 2.0, max_s: float = 6.0) -> None:
+    """随机停顿，降低机器特征。"""
+    time.sleep(random.uniform(min_s, max_s))
+
+
+# 尽力而为的轻量鼠标移动（合成事件 isTrusted=false；被检测也无害）
+MOUSE_JS = r"""(() => {
+  let x = 200 + Math.random() * 400, y = 200 + Math.random() * 400;
+  for (let i = 0; i < 8; i++) {
+    x += (Math.random() - 0.5) * 90;
+    y += (Math.random() - 0.5) * 90;
+    document.dispatchEvent(new MouseEvent('mousemove', {clientX: x, clientY: y, bubbles: true}));
+  }
+  return 'ok';
 })()"""
 
 
@@ -127,12 +145,24 @@ def main(keywords: list[str] | None = None) -> None:
     run_id = start_run("jiangsu_zhaobiao")
     all_notices: list[Notice] = []
     try:
-        for kw in kws:
-            wb.navigate(search_url(kw), session=SESSION, group_title="jiangsu-crawl")
+        # 暖场：先访问首页（模拟真人浏览入口），随机停留
+        wb.navigate(HOME, session=SESSION, group_title="jiangsu-crawl", new_tab=True)
+        human_pause(2.0, 5.0)
+        for i, kw in enumerate(kws):
+            if i > 0:
+                human_pause(3.0, 8.0)  # 关键词之间随机停顿，防连发限流
+            # 复用同一标签页（new_tab=False），避免浏览器里堆积 16 个标签
+            wb.navigate(search_url(kw), session=SESSION, group_title="jiangsu-crawl", new_tab=False)
+            human_pause(1.0, 2.5)
             raw = wait_results()
             notices = parse_items(raw, kw)
             print(f"[jiangsu-wb] {kw} items={len(notices)}", flush=True)
             all_notices.extend(notices)
+            # 轻量模拟鼠标行为
+            try:
+                wb.evaluate(MOUSE_JS, session=SESSION)
+            except Exception:
+                pass
         stats = upsert_notices(all_notices)
         finish_run(run_id, status="success", item_count=stats["attempted"], note=f"jiangsu-wb items={len(all_notices)}")
         print(json.dumps({"items": len(all_notices), **stats}, ensure_ascii=False))
