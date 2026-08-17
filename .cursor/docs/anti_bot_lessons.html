@@ -55,8 +55,10 @@ hr{border:none;border-top:1px solid var(--line);margin:30px 0}
 <a href="#s4">4 可复用的验证技巧</a> ·
 <a href="#s5">5 最终方案：真实浏览器（WebBridge）</a> ·
 <a href="#s6">6 通用决策树</a> ·
-<a href="#s7">7 对 cebpub 的攻坚指引</a> ·
-<a href="#s8">8 附录：关键代码</a>
+<a href="#s7">7 cebpub 攻坚复盘</a> ·
+<a href="#s8">8 ccgp 与 chinabidding 复盘</a> ·
+<a href="#s9">9 频控/瞬断的稳妥兜底方案（工程化）</a> ·
+<a href="#s10">10 附录：关键代码</a>
 </div>
 
 <h2 id="s1">1. 问题背景</h2>
@@ -199,15 +201,17 @@ hr{border:none;border-top:1px solid var(--line);margin:30px 0}
 
 <h2 id="s8">8. ccgp 与 chinabidding 复盘</h2>
 
-<h3>8.1 ccgp：频控极敏感，且「绿植租摆」数据本身稀疏</h3>
+<h3>8.1 ccgp：频控极敏感 + 「假 0」解析陷阱（两次翻车复盘）</h3>
 <table>
 <tr><th>发现</th><th>说明</th></tr>
-<tr><td><b>频控封页</b></td><td>探测太频繁会返回 2.7KB 拦截页，标题「频繁访问!中国政府采购网」，正文「您的访问过于频繁」。特征是页面极小、无任何结果结构。</td></tr>
-<tr><td><b>城市匹配</b></td><td>搜索结果的标题常不含城市，但「采购人（买家名）」常带城市（如「金华市金东区…」）→ 城市匹配应搜「买家+标题」，已改。</td></tr>
-<tr><td><b>8城+7-8月=0 的真实原因</b></td><td>数据稀疏：7-8 月的绿植租摆公告分布在长沙/金华/南昌/吉林等非目标城市；8 城内的在 4 月。不是爬虫 bug。</td></tr>
+<tr><td><b>频控封页</b></td><td>探测太频繁会返回 2.7KB 拦截页，标题「频繁访问!中国政府采购网」，正文「您的访问过于频繁」。特征是页面极小、无任何结果结构。恢复时间：数分钟到数小时不等。</td></tr>
+<tr><td><b>假 0 陷阱①</b></td><td>早期解析器只认 <code>&lt;li&gt;</code> 结果块，而结果确实在 <code>ul.vT-srch-result-list-bid &gt; li</code> 里——问题不在这，在②。教训：解析出 0 条 ≠ 无数据，先怀疑自己的解析器。</td></tr>
+<tr><td><b>假 0 陷阱②（真凶）</b></td><td>行尾「中标公告 | 北京 |」的<b>地区字段被忽略</b>，标题/采购人不含城市时 city=None → 8城过滤器把 20 条全部静默丢弃 → attempted=0 看起来像「无数据」。修复：解析 region 字段 + 标题/买家兜底；省份<b>不</b>映射到市（把「浙江·金华」标成杭州是假线索）。</td></tr>
+<tr><td><b>过滤要有计数</b></td><td>runner 现记录 raw/city_drop/date_drop 到 crawl_runs.note，attempted=0 也能一眼看出是「真无数据」还是「被过滤」。</td></tr>
+<tr><td><b>8城+7-8月=0 的真实原因</b></td><td>修好解析后全量核对 3 页 34 条：绿植租摆 90 天窗口内公告分布在长沙/金华/南昌/吉林/北京等非目标城市；8 城内的 1 条在 4 月（出窗口）。是真实稀缺，不是 bug。</td></tr>
 </table>
 <div class="box warn"><span class="t">ccgp 使用纪律</span>
-必须慢爬（每请求 2.5~5 秒延迟）+ 暖会话拿 Cookie；<b>严禁连续探测</b>（触发频控要等恢复）。被封时宁可少抓一轮，不要重试轰炸。</div>
+必须慢爬（每请求 2.5~5 秒延迟）+ 暖会话拿 Cookie；<b>严禁连续探测</b>（触发频控要等恢复）。被封时走冷却阶梯，不要重试轰炸。</div>
 
 <h3>8.2 chinabidding：接口超时是「临时抖动」，不是坏了</h3>
 <p>现象：<code>info_search</code> 一度超时、JSON 解析失败。复盘后发现：</p>
@@ -219,14 +223,41 @@ hr{border:none;border-top:1px solid var(--line);margin:30px 0}
 <div class="box key"><span class="t">通用经验（任何源站突然失败时）</span>
 先做「基础可达性三角探测」：首页 / 搜索页 / 数据接口各打一次，看是全站挂、还是单个接口抖动。是抖动就等它恢复，别急着大改代码。</div>
 
-<h2 id="s9">9. 附录：关键代码</h2>
-<h3>8.1 jsl_clearance.py 的优先级修复（阶段一求解器）</h3>
+<h2 id="s9">9. 频控/瞬断的稳妥兜底方案（工程化，2026-08-18 落地）</h2>
+<p>目标：<b>任何源站失败都不丢已采数据、不卡死半程、不把「假 0」当成功</b>。两条主线：ccgp 频控 + chinabidding 瞬断。</p>
+
+<h3>10.1 ccgp 频控四级兜底</h3>
+<ol>
+<li><b>慢爬纪律</b>：每请求 2.5~5s 抖动延迟；每 6h 一个调度槽只打 1 次搜索。</li>
+<li><b>暖会话</b>：WebBridge 真浏览器先开 ccgp 首页，导出 Cookie 给 HTTP 会话复用（warm=cookie_saved=true）。</li>
+<li><b>频控冷却阶梯</b>：命中「访问过于频繁」→ 按 90/180/300s 阶梯冷却重试（最多 3 次重试）；仍被拦 → 抛 <code>SourceError(partial=已采部分)</code>，绝不丢半程。</li>
+<li><b>整站冷却重试</b>：runner 收到 rate_limited 后冷却 600s 自动整站重试一次；再失败 → status=failed + 待办留痕，等下一个调度槽（6h 后）自然重试。</li>
+<li><b>双 IP 双路径</b>：NAS 走 HTTP（IP A），本机走 WebBridge 真浏览器 <code>scripts/crawl_ccgp_wb.py</code>（IP B）——一边被封另一边还能采，互为兜底。</li>
+</ol>
+
+<h3>10.2 chinabidding 瞬断隔离</h3>
+<ul>
+<li>按<b>关键词</b>隔离故障：某个词接口超时只记错误、继续下一个词，不拖垮整站采集；全部失败才抛 SourceError。</li>
+<li>HTTP 层升级：429 冷却重试（20s×次数+抖动）、403 短退避重试、5xx/超时指数退避（1.5s×2^i，封顶 16s）+ 抖动；chinabidding per_source retries=5、timeout=45s。</li>
+<li>实网验证：修复后 chinabidding 7.9s 内 status=success、3 条入库。</li>
+</ul>
+
+<h3>10.3 通用铁律（适用于任何源站）</h3>
+<div class="box key"><span class="t">三条兜底原则</span>
+<ol>
+<li><b>部分结果必须保留</b>：异常抛 <code>SourceError(partial=…)</code>，runner 拿到 partial 照样入库，status=partial 而不是 failed。</li>
+<li><b>0 条要能自证</b>：crawl_runs.note 记录 raw/city_drop/date_drop；页面有结果链接但解析 0 条时打印版面变化预警。</li>
+<li><b>频控靠等不靠轰</b>：冷却阶梯 + 调度槽天然重试；任何重试都有次数上限，避免把临时封禁打成永久封禁。</li>
+</ol></div>
+
+<h2 id="s10">10. 附录：关键代码</h2>
+<h3>10.1 jsl_clearance.py 的优先级修复（阶段一求解器）</h3>
 <pre><code># 修复前（错）：先拆 + 再拆 >>
 for ops in (("|",), ("^",), ("+", "-"), ("*", "/"), ("&lt;&lt;", "&gt;&gt;")):
 # 修复后（对）：JS 优先级 | &lt; ^ &lt; &lt;&lt;,&gt;&gt; &lt; +,- &lt; *,/
 for ops in (("|",), ("^",), ("&lt;&lt;", "&gt;&gt;"), ("+", "-"), ("*", "/")):</code></pre>
 
-<h3>8.2 阶段识别特征</h3>
+<h3>10.2 阶段识别特征</h3>
 <pre><code>阶段一特征：document.cookie = ('_')+('_')+... ; location.href = ...
 阶段二特征：var _0xe5ed=['wp3Cu8K/Nw==',...] （base64 数组 + 解码器 + setTimeout）</code></pre>
 

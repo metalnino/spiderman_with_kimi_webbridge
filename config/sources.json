@@ -13,7 +13,7 @@
     "list_url": "https://search.ccgp.gov.cn/bxsearch",
     "time_type": "5",
     "detail": "http",
-    "rate_limit_note": "易频繁访问；失败记 crawl_runs"
+    "rate_limit_note": "频控页→冷却阶梯(90/180/300s)→整站冷却600s重试一次→仍拦则保留部分结果；本机 WebBridge 双IP兜底 scripts/crawl_ccgp_wb.py"
   },
   "ggzy": {
     "enabled": false,

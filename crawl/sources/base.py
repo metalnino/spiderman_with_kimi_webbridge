@@ -8,6 +8,14 @@ from crawl.http_session import HttpSession
 from crawl.models import Notice
 
 
+class SourceError(Exception):
+    """源站级失败。partial 携带失败前已采集的公告，调用方必须入库而不是丢弃。"""
+
+    def __init__(self, message: str, partial: Iterable[Notice] | None = None):
+        super().__init__(message)
+        self.partial: list[Notice] = list(partial or [])
+
+
 class BaseSource(ABC):
     source_id: str
     source_name: str

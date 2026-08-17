@@ -7,8 +7,9 @@
     "ctbpsp 详情 vaptcha：真人验证后复用会话。",
     "ggzy：DEAL_TIME 必带；code=829 停词/降速。",
     "max_keywords_per_run：每站每轮词数上限，0=不限（默认爬全部 active 词）；限流时可下调。",
-    "chinabidding：info_search 列表；详情登录墙本期 list_only。",
-    "ccgp：易频繁访问；优先 WebBridge 或暖会话后慢速 HTTP；timeType=5。"
+    "chinabidding：info_search 列表；详情登录墙本期 list_only；接口瞬断按关键词隔离+指数退避。",
+    "ccgp：易频繁访问；命中频控页→冷却阶梯重试→仍拦则保留已采部分→整站冷却后自动重试一次；timeType=5。",
+    "原则：任何源站失败都不得丢弃已采部分结果（SourceError.partial 入库），status=partial 不是 failed。"
   ],
   "flow": [
     "1 可选 warm：WebBridge navigate 目标站首页/搜索页，短停留",
@@ -20,6 +21,8 @@
   "http": {
     "timeout_sec": 40,
     "retries": 3,
+    "backoff_429_sec": 20,
+    "backoff_base_sec": 1.5,
     "max_keywords_per_run": 0,
     "delay_ms_min": 800,
     "delay_ms_max": 2200,
@@ -62,13 +65,19 @@
     "chinabidding": {
       "primary": "http",
       "warm": "optional",
-      "detail": "list_only"
+      "detail": "list_only",
+      "timeout_sec": 45,
+      "retries": 5
     },
     "ccgp": {
       "primary": "webbridge_or_warm_http",
       "list_time_type": "5",
       "delay_ms_min": 2500,
-      "delay_ms_max": 5000
+      "delay_ms_max": 5000,
+      "block_cooldown_sec": [90, 180, 300],
+      "max_block_retries": 3,
+      "rate_limit_retry_once": true,
+      "rate_limit_cooldown_sec": 600
     },
     "cebpub": {
       "list": "webbridge",

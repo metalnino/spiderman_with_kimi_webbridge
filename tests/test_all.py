@@ -401,5 +401,191 @@ class TestEntry(unittest.TestCase):
         self.assertTrue(callable(mod.main))
 
 
+
+class TestResilience(unittest.TestCase):
+    """频控/瞬断稳妥兜底：冷却阶梯、部分结果保留、按词隔离。"""
+
+    def test_source_error_carries_partial(self):
+        from crawl import runner
+        from crawl.models import Notice
+        from crawl.sources.base import SourceError
+
+        class FakeSrc:
+            def fetch(self, kws, *, max_pages=1):
+                items = [
+                    Notice(source_id="ccgp", source_name="x", title="A", external_id="1"),
+                    Notice(source_id="ccgp", source_name="x", title="B", external_id="2"),
+                ]
+                yield from items
+                raise SourceError("ccgp rate_limited", partial=items)
+
+        notices, err = runner._collect(FakeSrc(), ["绿植租摆"], 1)
+        self.assertEqual(len(notices), 2)  # 半程结果不丢
+        self.assertIn("rate_limited", err)
+
+    def test_collect_plain_exception(self):
+        from crawl import runner
+
+        class Boom:
+            def fetch(self, kws, *, max_pages=1):
+                raise RuntimeError("boom")
+                yield
+
+        notices, err = runner._collect(Boom(), ["绿植租摆"], 1)
+        self.assertEqual(notices, [])
+        self.assertEqual(err, "boom")
+
+    def test_ccgp_block_ladder_then_success(self):
+        from crawl.sources.ccgp import CcgpSource
+
+        block = "<html><body>您的访问过于频繁，请稍后再试</body></html>"
+        ok = (
+            "<ul><li><a href=\"https://www.ccgp.gov.cn/cggg/dfgg/gkzb/202607/t20260710_10001.htm\">"
+            "上海市绿化局绿植租摆服务项目公开招标公告</a>"
+            "采购人：上海市绿化局 | 代理机构：某公司 | 2026.07.10 10:00:00</li></ul>"
+        )
+
+        class FakeHttp:
+            def __init__(self, responses):
+                self.responses = list(responses)
+                self.calls = 0
+
+            def get_text(self, url, headers=None):
+                self.calls += 1
+                return self.responses[min(self.calls, len(self.responses)) - 1]
+
+            def sleep(self):
+                pass
+
+        src = CcgpSource()
+        src.http = FakeHttp([block, block, ok])
+        fake_time = mock.Mock()
+        cfg = {"per_source": {"ccgp": {"block_cooldown_sec": [1, 2, 3], "max_block_retries": 3}}}
+        with mock.patch("crawl.sources.ccgp.time", fake_time), \
+             mock.patch("crawl.sources.ccgp.anti_bot_cfg", return_value=cfg):
+            items = list(src.fetch(["绿植租摆"], max_pages=1))
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].city, "上海")
+        self.assertEqual(items[0].publish_date, "2026-07-10 10:00:00")
+        self.assertEqual(fake_time.sleep.call_count, 2)  # 两次频控后第三次成功
+
+    def test_ccgp_persistent_block_preserves_partial(self):
+        from crawl.sources.ccgp import CcgpSource
+        from crawl.sources.base import SourceError
+
+        block = "<html><body>访问过于频繁</body></html>"
+        ok = (
+            "<ul><li><a href=\"https://www.ccgp.gov.cn/cggg/dfgg/gkzb/202607/t20260710_10001.htm\">"
+            "南京某单位绿植租摆项目</a>采购人：南京某单位 | 2026.07.10 10:00:00</li></ul>"
+        )
+
+        class FakeHttp:
+            def __init__(self):
+                self.calls = 0
+
+            def get_text(self, url, headers=None):
+                self.calls += 1
+                return ok if self.calls == 1 else block
+
+            def sleep(self):
+                pass
+
+        src = CcgpSource()
+        src.http = FakeHttp()
+        fake_time = mock.Mock()
+        cfg = {"per_source": {"ccgp": {"block_cooldown_sec": [0, 0, 0], "max_block_retries": 3}}}
+        with mock.patch("crawl.sources.ccgp.time", fake_time), \
+             mock.patch("crawl.sources.ccgp.anti_bot_cfg", return_value=cfg):
+            with self.assertRaises(SourceError) as ctx:
+                list(src.fetch(["kw1", "kw2"], max_pages=1))
+        self.assertIn("rate_limited", str(ctx.exception))
+        self.assertEqual(len(ctx.exception.partial), 1)  # kw1 的结果保留
+
+    def test_ccgp_is_blocked(self):
+        from crawl.sources.ccgp import CcgpSource
+
+        self.assertTrue(CcgpSource.is_blocked("<html>您的访问过于频繁</html>"))
+        self.assertTrue(CcgpSource.is_blocked("<html>操作频繁，请稍后重试</html>"))
+        self.assertFalse(CcgpSource.is_blocked("<html>共找到 0 条记录</html>"))
+        self.assertFalse(CcgpSource.is_blocked(""))
+
+    def test_ccgp_city_for_no_province_fabrication(self):
+        from crawl.sources.ccgp import CcgpSource
+
+        cc = CcgpSource()
+        self.assertEqual(cc.city_for("金华市某某单位 绿植租摆", "浙江"), None)  # 省不映射成市，防止假线索
+        self.assertEqual(cc.city_for("", "上海"), "上海")
+        self.assertEqual(cc.city_for("", "上海市本级"), "上海")
+        self.assertEqual(cc.city_for("上海市某局 绿植租摆", None), "上海")
+        self.assertEqual(cc.city_for("某单位", "北京"), None)  # 非目标城市
+
+    def test_ccgp_parse_region_and_type(self):
+        from crawl.sources.ccgp import CcgpSource
+
+        html = (
+            "<ul><li><a href=\"https://www.ccgp.gov.cn/cggg/zygg/zbgg/202607/t20260701_123456.htm\">"
+            "上海市某局绿植租摆服务项目</a>采购人：上海市某局 | 代理机构：某公司 | 2026.07.01 10:00:00 "
+            "公开招标公告 | 上海 | 服务/商务服务</li></ul>"
+        )
+        items = CcgpSource()._parse(html, "绿植租摆")
+        self.assertEqual(len(items), 1)
+        self.assertEqual(items[0].city, "上海")
+        self.assertEqual(items[0].region_text, "上海")
+        self.assertEqual(items[0].notice_type, "公开招标公告")
+
+    def test_chinabidding_keyword_isolation(self):
+        from crawl.sources.chinabidding import ChinabiddingSource
+        from crawl.sources.base import SourceError
+
+        def fake_json(url):
+            if "kw1" in url:
+                return {"relatedList": [{"id": "1", "title": "绿植租摆项目", "url": "/a.html", "publish_date": "2026-07-05"}]}
+            raise RuntimeError("timeout")
+
+        class FakeHttp:
+            def get_json(self, url, headers=None):
+                return fake_json(url)
+
+            def sleep(self):
+                pass
+
+        src = ChinabiddingSource()
+        src.http = FakeHttp()
+        items = list(src.fetch(["kw1", "kw2"], max_pages=1))
+        self.assertEqual(len(items), 1)  # kw2 超时不拖垮 kw1 的结果
+
+        class Boom:
+            def get_json(self, url, headers=None):
+                raise RuntimeError("timeout")
+
+            def sleep(self):
+                pass
+
+        src2 = ChinabiddingSource()
+        src2.http = Boom()
+        with self.assertRaises(SourceError) as ctx:
+            list(src2.fetch(["kw1"], max_pages=1))
+        self.assertIn("全部请求失败", str(ctx.exception))
+        self.assertEqual(ctx.exception.partial, [])
+
+    def test_rate_limit_retry_cfg(self):
+        import os as os_mod
+        from crawl import runner
+
+        enabled, cooldown = runner._rate_limit_retry_cfg("ccgp")
+        self.assertTrue(enabled)
+        self.assertGreaterEqual(cooldown, 60)
+        with mock.patch.dict(os_mod.environ, {"SPIDER_RATE_LIMIT_COOLDOWN_SEC": "5"}):
+            enabled2, cooldown2 = runner._rate_limit_retry_cfg("ccgp")
+            self.assertTrue(enabled2)
+            self.assertEqual(cooldown2, 5)
+        with mock.patch.dict(os_mod.environ, {"SPIDER_NO_RATE_LIMIT_RETRY": "1"}):
+            enabled3, _ = runner._rate_limit_retry_cfg("ccgp")
+            self.assertFalse(enabled3)
+        self.assertTrue(runner._is_rate_limited("ccgp rate_limited 连续被拦"))
+        self.assertFalse(runner._is_rate_limited("timeout"))
+
+
 if __name__ == "__main__":
     unittest.main()
+

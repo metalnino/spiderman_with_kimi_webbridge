@@ -43,6 +43,8 @@ class HttpSession:
         self.retries = int(per.get("retries") or http.get("retries") or 3)
         self.delay_min = int(per.get("delay_ms_min") or http.get("delay_ms_min") or 800) / 1000
         self.delay_max = int(per.get("delay_ms_max") or http.get("delay_ms_max") or 2200) / 1000
+        self.backoff_429 = float(per.get("backoff_429_sec") or http.get("backoff_429_sec") or 20)
+        self.backoff_base = float(per.get("backoff_base_sec") or http.get("backoff_base_sec") or 1.5)
         self.jsl_clearance = bool(per.get("jsl_clearance") or source_id == "jiangsu_zhaobiao")
         self._cookie_header: str | None = None
         if source_id:
@@ -103,13 +105,24 @@ class HttpSession:
                             hdrs["Cookie"] = self._cookie_header
                         time.sleep(0.3)
                         continue
-                # 4xx 客户端错误通常重试无益（429/403 立即失败，交由上层归类）
-                if 400 <= e.code < 500 and e.code != 408:
+                if e.code == 429:
+                    # 频控：冷却后重试（冷却时间随次数线性增长 + 抖动）
+                    time.sleep(self.backoff_429 * (i + 1) + random.uniform(0, 5))
+                    continue
+                if e.code == 403:
+                    # 疑似频控/风控：短退避后有限重试
+                    time.sleep(self.backoff_base * (i + 1) + random.uniform(0, 2))
+                    continue
+                if e.code == 408:
+                    time.sleep(self.backoff_base * (i + 1))
+                    continue
+                if 400 <= e.code < 500:
                     break
-                time.sleep(0.5 * (i + 1))
+                # 5xx/源站瞬断：指数退避（封顶 16s）+ 抖动
+                time.sleep(min(self.backoff_base * (2**i), 16) + random.uniform(0, 1))
             except Exception as e:  # noqa: BLE001
                 last = str(e) or type(e).__name__
-                time.sleep(0.5 * (i + 1))
+                time.sleep(min(self.backoff_base * (2**i), 16) + random.uniform(0, 1))
         raise RuntimeError(f"http failed: {url} ({last})")
 
     def get_text(self, url: str, *, headers: dict | None = None, encoding_hint: Optional[str] = None) -> str:
