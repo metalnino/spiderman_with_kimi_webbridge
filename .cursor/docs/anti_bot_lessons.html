@@ -143,6 +143,20 @@ hr{border:none;border-top:1px solid var(--line);margin:30px 0}
 <li><b>写代码的转义坑</b>：通过模板写代码时，<code>s</code>/<code>d</code>/<code>/</code> 的反斜杠会被吞掉变成 <code>s</code>/<code>d</code>/<code>/</code>，正则直接坏。写完用 <code>repr()</code> 验证文件真实内容。</li>
 </ol>
 
+<h2 id="s45">4.5 反爬行为伪装（浏览器爬虫的「人味」）</h2>
+<p>过掉 JSL 只是入场券；持续抓取还要让行为「像人」，否则会触发更狠的限流或封禁。已验证有效的组合：</p>
+<table>
+<tr><th>手段</th><th>做法</th><th>说明</th></tr>
+<tr><td><b>随机停顿</b></td><td>关键词之间随机停 3~8 秒，进搜索页前随机停 1~2.5 秒</td><td>消除「连发」机器特征，零成本必做</td></tr>
+<tr><td><b>暖场首页</b></td><td>先访问首页随机停留 2~5 秒，再进搜索</td><td>模拟真人「从入口进」的路径，而不是直接打搜索 URL</td></tr>
+<tr><td><b>复用标签页</b></td><td>只第一次 new_tab=true，后续 new_tab=false</td><td>否则 N 个关键词在浏览器里开 N 个标签页</td></tr>
+<tr><td><b>轻量鼠标模拟</b></td><td>JS 派发随机轨迹 mousemove</td><td>合成事件 isTrusted=false，严格反爬能识别；尽力而为，不是主防线</td></tr>
+<tr><td><b>控制频率</b></td><td>建议 4~6 小时一轮</td><td>JSL 通行证 Max-age=3600；太频繁触发 IP 级风控</td></tr>
+<tr><td><b>串行执行</b></td><td>多个 WebBridge 爬虫不能同时跑</td><td>它们共用同一个真实浏览器，并发会互相抢</td></tr>
+</table>
+<div class="box key"><span class="t">核心认知</span>
+行为伪装的<b>主防线是「真浏览器 + 随机节奏 + 控制频率」</b>；合成鼠标/事件只是锦上添花。别把宝押在「模拟得像不像」上，押在「频率低不低、路径像不像人」上。</div>
+
 <h2 id="s5">5. 最终方案：真实浏览器（WebBridge）</h2>
 <p>jiangsu 的最终爬虫是 <code>scripts/crawl_jiangsu_wb.py</code>（本机运行，需 Kimi 浏览器扩展连接）：</p>
 <pre><code>流程：
@@ -166,17 +180,22 @@ hr{border:none;border-top:1px solid var(--line);margin:30px 0}
 └─ 真浏览器 = 本机 WebBridge（Kimi 扩展）优先；无头 Playwright 只做渲染不碰反爬
 </code></pre>
 
-<h2 id="s7">7. 对 cebpub 的攻坚指引（下一步就用）</h2>
-<p>cebpub 现状：搜索页 JS 渲染 + DES 加密；Playwright 渲染和提取都通了（每页 15 条），但<b>关键词 searchName 没传进请求</b>，返回全量 72 万条。</p>
-<p>按本文件的验证技巧，攻坚步骤：</p>
+<h2 id="s7">7. cebpub 攻坚复盘（已攻克 ✅）</h2>
+<p>cebpub 的坑不是「加密」，而是<b>找错了搜索函数</b>。复盘定位链：</p>
+<table>
+<tr><th>误区</th><th>真相</th></tr>
+<tr><td>点「搜索」按钮触发搜索</td><td>按钮无 form、无 onclick，点击<b>不发任何请求</b>（页面加载时的默认搜索早就返回了全量列表，造成「搜索成功」的假象）</td></tr>
+<tr><td><code>query()</code> 是搜索函数</td><td>页面全局里 <b><code>query</code> 根本不存在</b>（真实函数名是 <code>querys</code>，但它是首页顶部搜索，读 <code>#allTopId</code> 会空指针）</td></tr>
+<tr><td>关键词没传进去</td><td>正确入口是 <b><code>performSearchRequest(null)</code></b>：它读 <code>getSearchParams()[3]</code>（关键词）→ POST <code>getStringMethod.do</code>，<code>searchName=绿植租摆</code> 立即正确</td></tr>
+</table>
+<p><b>通用定位方法（任何 JS 搜索站适用）</b>：</p>
 <ol>
-<li>Playwright 打开 <code>getSearch.do</code>，<code>page.fill("#keySearchValue", 词)</code>；</li>
-<li>直接 <code>page.evaluate("getSearchParams()")</code> 看关键词在不在返回数组里 —— <b>先确认填词是否生效</b>；</li>
-<li>监听 <code>getStringMethod.do</code>（加密接口）的 POST body，看 <code>searchName=</code> 是否带值 —— 定位关键词在哪一环丢的；</li>
-<li>若页面 JS 读不到填的词：换 <code>page.type</code> 逐字输入 / 直接 <code>$("#keySearchValue").val(词)</code> 再触发 <code>query()</code>；</li>
-<li>若加密后 searchName 依旧为空：找 <code>query()</code> 里关键词变量到 POST 参数的映射（页面 JS 里必然留着映射代码）；</li>
-<li>若最终仍是「加密+指纹」双墙 → 和 jiangsu 一样，cebpub 走<b>真实浏览器（WebBridge）</b>让页面自己加密。</li>
+<li><code>page.fill</code> 填词 → <code>page.evaluate("getSearchParams()")</code> 确认关键词进没进参数数组；</li>
+<li>监听网络（<code>page.on("request")</code>）抓 POST body，看关键词字段有值没值 —— 定位丢失环节；</li>
+<li>遍历 <code>window</code> 上所有含 search/query 的函数名（页面 JS 里函数可能被改名、被包进闭包），<code>fn.toString()</code> 看源码找真入口；</li>
+<li>别被「页面加载时的默认请求」误导 —— 过滤网络日志时要区分「on-load 默认」和「操作触发」两类请求。</li>
 </ol>
+<p>最终 cebpub 用 Playwright 无头 + <code>performSearchRequest(null)</code> 即通：关键词过滤正确，每页 15 条，经 8 城+7-8月过滤入库 5 条。</p>
 
 <h2 id="s8">8. 附录：关键代码</h2>
 <h3>8.1 jsl_clearance.py 的优先级修复（阶段一求解器）</h3>

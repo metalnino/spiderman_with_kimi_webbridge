@@ -60,7 +60,7 @@ def extract_results(page) -> list[dict]:
         if len(title) < 4:
             continue
         pub = None
-        dm = re.search(r"(20d{2}[-.]d{1,2}[-.]d{1,2})", row)
+        dm = re.search(r"(20\d{2}[-.]\d{1,2}[-.]\d{1,2})", row)
         if dm:
             pub = dm.group(1).replace(".", "-")
         region = None
@@ -79,6 +79,10 @@ def extract_results(page) -> list[dict]:
 def main(keywords: list[str] | None = None) -> None:
     from playwright.sync_api import sync_playwright
 
+    from crawl.config_loader import only_target_cities, publish_date_range, target_city_names
+
+    targets = set(target_city_names())
+    pmin, pmax = publish_date_range()
     kws = keywords or enabled_keywords()
     run_id = start_run("cebpub")
     notices: list[Notice] = []
@@ -91,13 +95,17 @@ def main(keywords: list[str] | None = None) -> None:
             for kw in kws:
                 page.fill("#keySearchValue", kw)
                 page.wait_for_timeout(400)
-                try:
-                    page.locator("button:has-text('搜索'), a:has-text('搜索'), input[type=button]").first.click(timeout=5000)
-                    trig = "click"
-                except Exception:  # noqa: BLE001
-                    trig = "click_failed"
+                # 正确触发：直接调 performSearchRequest(null)（query()/点按钮都不触发搜索）
+                trig = page.evaluate("() => { try { performSearchRequest(null); return 'called'; } catch(e) { return 'ERR:'+e.message; } }")
                 page.wait_for_timeout(8000)
                 items = extract_results(page)
+                # 8 城 + 发布时间范围过滤（与 HTTP 流程一致）
+                items = [
+                    it for it in items
+                    if (not only_target_cities() or it["city"] in targets)
+                    and (not pmin or not it["publish_date"] or it["publish_date"][:10] >= pmin)
+                    and (not pmax or not it["publish_date"] or it["publish_date"][:10] <= pmax)
+                ]
                 print(f"[cebpub-pw] {kw} trig={trig} items={len(items)}", flush=True)
                 for it in items:
                     notices.append(
