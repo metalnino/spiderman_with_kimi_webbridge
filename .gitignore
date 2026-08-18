@@ -17,6 +17,10 @@ data/multi_site/
 data/data/
 # 列表页可本地生成；不强制提交大数据
 data/web/*.json
+# 运行时再生成的缓存/日志（每次爬取都会变，不入库）
+data/web/crm.html
+data/web/dashboard.html
+data/web/warm_log.jsonl
 # 临时探针脚本与样本（调试残留，勿入库）
 scripts/_tmp_*
 data/web/zhaobiao_*
