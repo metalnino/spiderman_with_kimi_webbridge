@@ -76,7 +76,11 @@ def extract_results(page) -> list[dict]:
     return items
 
 
-def main(keywords: list[str] | None = None) -> None:
+def main(keywords: list[str] | None = None) -> dict:
+    """返回 {status, error, notices:[dict含content_hash]}。员工外壳（collector/v1.0.0）路由调用；
+    纯增量：CLI 入口忽略返回值，行为不变。"""
+    from dataclasses import asdict
+
     from playwright.sync_api import sync_playwright
 
     from crawl.config_loader import only_target_cities, publish_date_range, target_city_names
@@ -126,9 +130,15 @@ def main(keywords: list[str] | None = None) -> None:
         stats = upsert_notices(notices)
         finish_run(run_id, status="success", item_count=stats["attempted"], note=f"cebpub-pw items={len(notices)}")
         print(json.dumps({"items": len(notices), **stats}, ensure_ascii=False))
+        return {
+            "status": "success",
+            "error": None,
+            "notices": [{**asdict(n), "content_hash": n.content_hash()} for n in notices],
+        }
     except Exception as e:  # noqa: BLE001
         finish_run(run_id, status="failed", item_count=0, note=str(e)[:500])
         print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+        return {"status": "failed", "error": str(e)[:300], "notices": []}
 
 
 if __name__ == "__main__":

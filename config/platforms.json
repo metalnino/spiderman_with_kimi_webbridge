@@ -1,0 +1,71 @@
+[
+  {
+    "id": "ccgp",
+    "name": "中国政府采购网",
+    "enabled": true,
+    "route": "http",
+    "params": {
+      "list_url": "https://search.ccgp.gov.cn/bxsearch",
+      "time_type": "5"
+    },
+    "proxy": null
+  },
+  {
+    "id": "chinabidding",
+    "name": "中国采购与招标网",
+    "enabled": true,
+    "route": "http",
+    "params": {
+      "list_api": "https://www.chinabidding.com.cn/sdbxinfo/313035392e302e7379675f62616e64/datax/json/info_search",
+      "detail_host": "https://www.chinabidding.cn",
+      "rp": 15,
+      "mode": "list_only"
+    },
+    "proxy": null
+  },
+  {
+    "id": "ggzy",
+    "name": "全国公共资源交易平台",
+    "enabled": true,
+    "route": "http",
+    "params": {
+      "api": "https://www.ggzy.gov.cn/information/pubTradingInfo/getTradList",
+      "deal_time": "05",
+      "referer": "https://www.ggzy.gov.cn/deal/dealList.html",
+      "fetch_detail": false
+    },
+    "proxy": null
+  },
+  {
+    "id": "jsggzy",
+    "name": "江苏省公共资源交易网",
+    "enabled": true,
+    "route": "http",
+    "params": {
+      "home": "http://jsggzy.jszwfw.gov.cn/",
+      "search_api": "http://jsggzy.jszwfw.gov.cn/inteligentsearch/rest/esinteligentsearch/getFullTextDataNew"
+    },
+    "proxy": null
+  },
+  {
+    "id": "cebpub",
+    "name": "中国招标投标公共服务平台",
+    "enabled": true,
+    "route": "playwright",
+    "params": {
+      "search_url": "https://www.cebpubservice.com/ctpsp_iiss/searchbusinesstypebeforedooraction/getSearch.do"
+    },
+    "proxy": null
+  },
+  {
+    "id": "jiangsu_zhaobiao",
+    "name": "江苏招标网",
+    "enabled": true,
+    "route": "webbridge",
+    "params": {
+      "home": "https://jiangsu.zhaobiao.cn/",
+      "search_api": "https://jiangsu.zhaobiao.cn/psearch/Dqsearch"
+    },
+    "proxy": null
+  }
+]

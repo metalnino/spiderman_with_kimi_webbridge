@@ -1,0 +1,53 @@
+{
+  "$comment": "招标采集员契约 v1.0.0 —— 总设计师工作区下发，爬虫工作区按此实现内核并套壳。",
+  "employee": "招标采集员",
+  "id": "collector",
+  "contractVersion": "1.0.0",
+  "coreType": "rule",
+  "autonomyBudget": "deterministic",
+
+  "input": {
+    "keywords":     { "type": "string[]", "required": true,  "description": "关键词列表，如 [绿植租摆, 绿植, 摆花, 绿化养护, 租摆]；具体内容由配置层 keywords.json 维护" },
+    "platforms":    { "type": "string[]", "required": true,  "description": "平台标识列表，如 [ccgp, ggzy, jsyg]；平台 selector/代理见配置层 platforms.json" },
+    "dateRange":    { "type": "object",   "required": false, "description": "{ start: ISO8601, end: ISO8601 }，缺省取上次运行点至今" },
+    "regionFilter": { "type": "string[]", "required": false, "description": "地区白名单；缺省不限" }
+  },
+
+  "output": {
+    "type": "array",
+    "description": "去重后的结构化公告条目数组",
+    "items": {
+      "title":       { "type": "string",             "description": "公告标题" },
+      "platform":    { "type": "string",             "description": "来源平台标识" },
+      "url":         { "type": "string",             "description": "公告链接" },
+      "publishTime": { "type": "string", "format": "ISO8601", "description": "发布时间" },
+      "region":      { "type": "string",             "description": "地区" },
+      "amount":      { "type": "string", "nullable": true, "description": "预算金额原文（可空）" },
+      "summary":     { "type": "string", "nullable": true, "description": "正文摘要（可空）" },
+      "dedupId":     { "type": "string",             "description": "去重主键：md5(title + platform + url)" }
+    }
+  },
+
+  "config": {
+    "versioning": "git",
+    "rollback": "git checkout -- config/",
+    "files": [
+      { "path": "config/keywords.json",  "schema": "string[]",        "owner": "improver", "description": "关键词库，改进层可增删" },
+      { "path": "config/platforms.json", "schema": "platformConfig[]", "owner": "improver", "description": "平台 + selector + 代理配置，页面改版时更新" },
+      { "path": "config/filters.json",   "schema": "filterConfig",   "owner": "improver", "description": "地区/预算/时间阈值" }
+    ]
+  },
+
+  "observability": {
+    "reportFormat": "json",
+    "reportPath": "reports/collector-report.json",
+    "metrics": [
+      { "name": "fetched_count",         "type": "integer",  "description": "本次抓取总数" },
+      { "name": "dedup_new_count",       "type": "integer",  "description": "去重后新增数（驱动覆盖率）" },
+      { "name": "platform_success_rate", "type": "object",   "description": "{ 平台: 成功率 }，某平台骤降为 selector 失效信号" },
+      { "name": "empty_platforms",       "type": "string[]", "description": "空结果平台清单（selector 失效/改版信号）" },
+      { "name": "blocked_count",         "type": "integer",  "description": "403/封禁次数（反爬信号）" },
+      { "name": "elapsed_ms",            "type": "integer",  "description": "本次耗时" }
+    ]
+  }
+}

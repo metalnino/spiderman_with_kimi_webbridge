@@ -137,11 +137,18 @@ def parse_items(raw: list[dict], kw: str) -> list[Notice]:
     return notices
 
 
-def main(keywords: list[str] | None = None) -> None:
+def main(keywords: list[str] | None = None) -> dict:
+    """返回 {status, error, notices:[dict含content_hash]}。员工外壳（collector/v1.0.0）路由调用；
+    纯增量：CLI 入口忽略返回值，行为不变。"""
+    from dataclasses import asdict
+
     kws = keywords or enabled_keywords()
     if not wb.available():
+        # 诚实记账：桥不在线也留一条 failed run，避免台账「假 0」无自证
+        run_id = start_run("jiangsu_zhaobiao")
+        finish_run(run_id, status="failed", item_count=0, note="webbridge_not_available")
         print(json.dumps({"ok": False, "error": "webbridge_not_available", "hint": "请打开 Kimi 浏览器扩展"}, ensure_ascii=False))
-        return
+        return {"status": "failed", "error": "webbridge_not_available", "notices": []}
     run_id = start_run("jiangsu_zhaobiao")
     all_notices: list[Notice] = []
     try:
@@ -166,9 +173,15 @@ def main(keywords: list[str] | None = None) -> None:
         stats = upsert_notices(all_notices)
         finish_run(run_id, status="success", item_count=stats["attempted"], note=f"jiangsu-wb items={len(all_notices)}")
         print(json.dumps({"items": len(all_notices), **stats}, ensure_ascii=False))
+        return {
+            "status": "success",
+            "error": None,
+            "notices": [{**asdict(n), "content_hash": n.content_hash()} for n in all_notices],
+        }
     except Exception as e:  # noqa: BLE001
         finish_run(run_id, status="failed", item_count=0, note=str(e)[:500])
         print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+        return {"status": "failed", "error": str(e)[:300], "notices": []}
 
 
 if __name__ == "__main__":

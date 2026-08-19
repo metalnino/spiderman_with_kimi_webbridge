@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>员工模板规范 v1.0 · 总设计师工作区</title>
+<style>
+  :root {
+    --green-900:#12382b; --green-700:#1c5c45; --green-600:#23704f; --green-500:#2f8f64;
+    --green-100:#e3f2ea; --green-50:#f2faf6;
+    --ink:#1f2933; --ink-soft:#52606d; --line:#dfe6e2;
+    --amber-bg:#fdf3e3; --amber-border:#e8b25a;
+    --red-bg:#fdeeee; --red-border:#dd8b8b;
+    --blue-bg:#eaf2fb; --blue-border:#7fa8d9;
+    --purple-bg:#f1ecfb; --purple-border:#a88fd6;
+    --card-shadow:0 1px 3px rgba(18,56,43,.08), 0 8px 24px rgba(18,56,43,.06);
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;
+    color:var(--ink); background:#f6f8f7; line-height:1.75; font-size:15px; }
+  .wrap { max-width:1000px; margin:0 auto; padding:32px 24px 96px; }
+
+  header.doc { background:linear-gradient(135deg,var(--green-900),var(--green-600)); color:#fff;
+    border-radius:16px; padding:40px 36px; margin-bottom:28px; box-shadow:var(--card-shadow); }
+  header.doc h1 { margin:0 0 10px; font-size:27px; letter-spacing:1px; }
+  header.doc .sub { opacity:.92; margin:0; }
+  header.doc .meta { margin-top:18px; font-size:12.5px; opacity:.85; display:flex; flex-wrap:wrap; gap:12px; }
+  header.doc .tag { background:rgba(255,255,255,.16); border:1px solid rgba(255,255,255,.28); padding:2px 10px; border-radius:999px; }
+
+  nav.toc { background:#fff; border:1px solid var(--line); border-radius:12px; padding:18px 22px; margin:0 0 30px; box-shadow:var(--card-shadow); font-size:14px; }
+  nav.toc h2 { margin:0 0 10px; font-size:14px; letter-spacing:1px; color:var(--green-900); }
+  nav.toc ol { margin:0; padding-left:22px; columns:2; }
+  nav.toc a { color:var(--green-700); text-decoration:none; }
+  nav.toc a:hover { text-decoration:underline; }
+
+  section { margin:38px 0; }
+  h2 { font-size:21px; color:var(--green-900); border-left:5px solid var(--green-500); padding-left:12px; margin:0 0 18px; }
+  h3 { font-size:16px; color:var(--green-700); margin:24px 0 10px; }
+  h4 { font-size:14.5px; color:var(--ink); margin:18px 0 8px; }
+  p { margin:8px 0; }
+  .muted { color:var(--ink-soft); }
+  .small { font-size:13px; }
+  .lead { font-size:15.5px; color:var(--green-900); }
+
+  .card { background:#fff; border:1px solid var(--line); border-radius:12px; padding:20px 22px; margin:14px 0; box-shadow:var(--card-shadow); }
+  .callout { border-radius:10px; padding:14px 16px; margin:14px 0; border-left:4px solid; }
+  .callout.principle { background:var(--green-50); border-color:var(--green-500); }
+  .callout.warn { background:var(--amber-bg); border-color:var(--amber-border); }
+  .callout.risk { background:var(--red-bg); border-color:var(--red-border); }
+  .callout.info { background:var(--blue-bg); border-color:var(--blue-border); }
+  .callout b { display:block; margin-bottom:4px; }
+
+  .principle-block { background:#fff; border:1px solid var(--line); border-left:5px solid var(--green-500);
+    border-radius:10px; padding:18px 20px; margin:16px 0; box-shadow:var(--card-shadow); }
+  .principle-block .no { display:inline-block; background:var(--green-900); color:#fff; font-weight:700;
+    padding:1px 10px; border-radius:999px; font-size:12px; letter-spacing:1px; margin-bottom:8px; }
+  .principle-block h3 { margin:0 0 8px; font-size:17px; }
+  .principle-block .prop { font-weight:600; color:var(--green-900); }
+  .principle-block .derive { color:var(--ink-soft); font-size:14px; }
+  .principle-block .map { font-size:13.5px; margin-top:8px; padding-top:8px; border-top:1px dashed var(--line); }
+  .principle-block .map b { color:var(--green-700); }
+
+  /* employee structure diagram */
+  .emp-box { border:2px solid var(--green-700); border-radius:14px; overflow:hidden; margin:18px 0; background:#fff; }
+  .emp-core { background:var(--green-900); color:#fff; padding:16px 20px; }
+  .emp-core .t { font-weight:700; font-size:15px; }
+  .emp-core .d { opacity:.85; font-size:13px; }
+  .emp-shell { padding:14px 20px 18px; }
+  .shell-layer { border-left:4px solid var(--green-500); background:var(--green-50); border-radius:8px; padding:10px 14px; margin:8px 0; }
+  .shell-layer b { color:var(--green-900); }
+
+  table { border-collapse:collapse; width:100%; margin:14px 0; background:#fff; font-size:13.8px; }
+  th,td { border:1px solid var(--line); padding:9px 12px; text-align:left; vertical-align:top; }
+  th { background:var(--green-50); color:var(--green-900); font-weight:600; white-space:nowrap; }
+  tr:nth-child(even) td { background:#fbfdfc; }
+
+  pre { background:#0f241c; color:#d9ece4; border-radius:10px; padding:16px 18px; overflow-x:auto;
+    font-family:Consolas,Monaco,"Courier New",monospace; font-size:12.8px; line-height:1.65; margin:12px 0; }
+  code.inline { background:var(--green-100); color:var(--green-900); padding:1px 6px; border-radius:4px;
+    font-family:Consolas,Monaco,monospace; font-size:13px; }
+
+  .flow { display:flex; flex-wrap:wrap; align-items:center; gap:8px; margin:16px 0; }
+  .flow .node { background:#fff; border:1px solid var(--line); border-radius:10px; padding:9px 13px;
+    text-align:center; font-size:12.5px; box-shadow:var(--card-shadow); min-width:104px; }
+  .flow .node .t { font-weight:700; color:var(--green-900); }
+  .flow .node .d { font-size:11px; color:var(--ink-soft); margin-top:2px; }
+  .flow .arrow { color:var(--green-600); font-size:17px; font-weight:700; }
+  .flow .human { border-color:var(--amber-border); background:var(--amber-bg); }
+  .flow .human .t { color:#8a5a10; }
+
+  .tag-r { display:inline-block; font-size:11px; font-weight:700; padding:1px 9px; border-radius:999px; }
+  .tag-breaking { background:var(--red-bg); color:#a33; border:1px solid var(--red-border); }
+  .tag-additive { background:var(--green-100); color:var(--green-700); border:1px solid var(--green-500); }
+  .tag-rule { background:#e6f2f5; color:#336e80; }
+  .tag-llm { background:var(--purple-bg); color:#5b43a8; }
+  .tag-agent { background:#faf0e0; color:#9a6a1f; }
+
+  footer.doc { margin-top:44px; padding-top:18px; border-top:1px solid var(--line); color:var(--ink-soft); font-size:12.5px; }
+  ul.tight { margin:6px 0; padding-left:20px; }
+  ul.tight li { margin:4px 0; }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+<header class="doc">
+  <h1>员工模板规范 v1.0</h1>
+  <p class="sub">总设计师工作区 · 唯一权威规范 —— 定义「一个员工」的标准形态、契约、版本化与漂移管理</p>
+  <div class="meta">
+    <span class="tag">适用范围：所有能力工位工作区</span>
+    <span class="tag">性质：规范（Normative）</span>
+    <span class="tag">版本：v1.0.0</span>
+  </div>
+</header>
+
+<nav class="toc">
+  <h2>目录</h2>
+  <ol>
+    <li><a href="#s0">文档定位与读者</a></li>
+    <li><a href="#s1">第一性原理（推导起点）</a></li>
+    <li><a href="#s2">核心模型：员工 = 内核 + 外壳</a></li>
+    <li><a href="#s3">外壳四层规范</a></li>
+    <li><a href="#s4">内核类型与自主性预算</a></li>
+    <li><a href="#s5">契约规范</a></li>
+    <li><a href="#s6">漂移管理机制</a></li>
+    <li><a href="#s7">编排规范</a></li>
+    <li><a href="#s8">知识库规范</a></li>
+    <li><a href="#s9">员工生命周期</a></li>
+    <li><a href="#s10">完整实例：招标采集员</a></li>
+    <li><a href="#s11">附录：契约 JSON Schema + 术语表</a></li>
+  </ol>
+</nav>
+
+<section id="s0">
+  <h2>〇、文档定位与读者</h2>
+  <p class="lead">本文档是「总设计师工作区」的唯一权威产出。它不写任何能力代码，只定义<b>标准、契约与迁移规则</b>。</p>
+  <table>
+    <tr><th>读者</th><th>读什么</th><th>不读什么</th></tr>
+    <tr><td>总设计师工作区（本区）</td><td>全部。维护规范、契约、注册表</td><td>——</td></tr>
+    <tr><td>能力工位工作区（爬虫/解析/生成/复核…）</td><td>第 3、4、5 节 + 对应契约文件</td><td>编排、知识库、漂移管理细节</td></tr>
+    <tr><td>改进层 / 运维</td><td>第 5、6、7 节的观测与迁移</td><td>内核实现</td></tr>
+  </table>
+  <div class="callout principle">
+    <b>文档的「单一事实来源」原则</b>
+    一切跨工作区的约定，<b>只以本文档 + <code class="inline">contracts/</code> + <code class="inline">registry.json</code> 为准</b>。聊天记录、口头约定、记忆，一律不作数。任何约定若未落进这三个载体，视为不存在。
+  </div>
+</section>
+
+<section id="s1">
+  <h2>一、第一性原理（推导起点）</h2>
+  <p>本规范的一切条款，都由以下七条原理推导而来。每条原理给出「命题 → 推导 → 本规范落点」，保证设计可追溯、可质疑。</p>
+
+  <div class="principle-block">
+    <span class="no">原理 1</span>
+    <h3>岗位可分解为「流程 + 记忆 + 工具」</h3>
+    <div class="prop">命题：一个岗位不是原子体，而是过程（步骤与决策）、记忆（累积知识）、工具（作用于世界的能力）三者的组合。</div>
+    <div class="derive">推导：既然可分解，就能把「过程」建模为编排、把「记忆」建模为知识库、把「工具」建模为能力单元。这是「岗位 Agent 化」的合法性来源。</div>
+    <div class="map"><b>落点：</b>第 2 节「员工 = 内核 + 外壳」、第 7 节「编排」、第 8 节「知识库」。</div>
+  </div>
+
+  <div class="principle-block">
+    <span class="no">原理 2</span>
+    <h3>能力单元 = 内核 + 外壳（不变量）</h3>
+    <div class="prop">命题：每个员工都是「标准化能力单元」；外壳（身份/契约/配置/观测）对所有员工通用，内核（实现）因人而异。</div>
+    <div class="derive">推导：外壳统一 → 编排器可用同一套方式启动、传参、收结果、看指标、改配置；内核各异 → 每个工位独立实现，互不阻塞。</div>
+    <div class="map"><b>落点：</b>第 2、3 节。这是「一套模板走所有员工」的直接来源。</div>
+  </div>
+
+  <div class="principle-block">
+    <span class="no">原理 3</span>
+    <h3>确定性优先（最小自主性）</h3>
+    <div class="prop">命题：每个节点只分配「必要的最少自主性」——能规则就规则，LLM 只用于理解和生成。</div>
+    <div class="derive">推导：自主性越少 → 越可审计、越可复现、成本越低、越不易失控。投标废标代价高，可审计性优先级高于灵活性。</div>
+    <div class="map"><b>落点：</b>第 4 节「自主性预算」、第 4 节的分级规则。</div>
+  </div>
+
+  <div class="principle-block">
+    <span class="no">原理 4</span>
+    <h3>契约是唯一连接（不靠记忆）</h3>
+    <div class="prop">命题：多工作区彼此隔离、无共享记忆，唯一可靠的连接是<b>机器可读、带版本号</b>的契约。</div>
+    <div class="derive">推导：凡依赖记忆或对话的约定，会随上下文丢失而失效。因此契约必须版本化、可查询、可测试。</div>
+    <div class="map"><b>落点：</b>第 5 节「契约规范」、第 6 节「漂移管理」。</div>
+  </div>
+
+  <div class="principle-block">
+    <span class="no">原理 5</span>
+    <h3>自我迭代 = 观测 + 反馈 + 改进（与内核正交）</h3>
+    <div class="prop">命题：自我净化不靠「节点是不是 agent」，靠「观测 → 反馈 → 改进」的闭环。它与内核类型是正交的两个维度。</div>
+    <div class="derive">推导：一个确定性爬虫节点 + 带护栏的反馈闭环，比黑盒 agent 爬虫更可控地进化——因为你知道它在改什么、为什么改、坏了能回滚。</div>
+    <div class="map"><b>落点：</b>第 3 节「观测层 + 配置层」、第 6 节「改进闭环与护栏」。</div>
+  </div>
+
+  <div class="principle-block">
+    <span class="no">原理 6</span>
+    <h3>人在环不可省（可审计 + 可追责）</h3>
+    <div class="prop">命题：标书有法律效力，废标代价高；报价、关系判断、终审签字的权威必须留在人手里。</div>
+    <div class="derive">推导：自动化的目的是「把人的低价值劳动释放出来」，不是替代判断。凡是「谁签字谁负责」的位置，编排里必须是 interrupt 节点。</div>
+    <div class="map"><b>落点：</b>第 7 节「人在环节点」。</div>
+  </div>
+
+  <div class="principle-block">
+    <span class="no">原理 7</span>
+    <h3>稳定性与可变性分离（漂移最小化）</h3>
+    <div class="prop">命题：把「稳定核心」（字段语义、ID 格式、状态字段）与「易变边缘」（关键词、阈值、selector、提示词）分层，让易变的东西全部沉入配置层。</div>
+    <div class="derive">推导：规范「变丰满」90% 是边缘丰满（加可选字段、加指标、加词）。若核心在 T1 就想清，漂移面积自然最小。</div>
+    <div class="map"><b>落点：</b>第 3 节「配置层」、第 5 节「兼容性分级」。</div>
+  </div>
+
+  <div class="callout info">
+    <b>七条原理的优先序</b>
+    冲突时的裁决顺序：<b>原理 6（人在环）&gt; 原理 4（契约）&gt; 原理 3（确定性）&gt; 原理 7（稳定性）&gt; 其余</b>。例：当「给某节点加自主性」与「可审计性」冲突时，可审计性优先。
+  </div>
+</section>
+
+<section id="s2">
+  <h2>二、核心模型：员工 = 内核 + 外壳</h2>
+  <p>本规范最重要的一个定义，直接消解「工作流 vs agent」的二元纠结：</p>
+  <div class="callout principle">
+    <b>员工 ≠ agent。员工 = 内核 + 外壳。</b>
+    一个员工是不是 agent，只由<b>内核</b>决定；而「成为员工」这件事，由<b>外壳</b>决定。套上外壳，一段爬虫代码就是一个合格员工（工作流型员工），完全成立。
+  </div>
+
+  <div class="emp-box">
+    <div class="emp-shell">
+      <div class="shell-layer"><b>① 身份层（岗位卡）</b> —— 名称 / 职责 / 产出 / 内核类型 / 自主性预算</div>
+      <div class="shell-layer"><b>② 契约层（汇报接口）</b> —— 输入 schema → 输出 schema（机器可读）</div>
+      <div class="shell-layer"><b>③ 配置层（可修订 SOP）</b> —— 可调参数：关键词 / 阈值 / selector / 提示词（版本化，可回滚）</div>
+      <div class="shell-layer"><b>④ 观测层（绩效考核）</b> —— 指标钩子：覆盖率 / 成功率 / 耗时 / 置信度</div>
+    </div>
+    <div class="emp-core">
+      <div class="t">内核：能力实现</div>
+      <div class="d">你已经写好的代码 / 或 LLM 调用。只有内核因员工而异，外壳四层对所有员工通用。</div>
+    </div>
+  </div>
+
+  <p>四层外壳是「一套模板走所有员工」的载体；内核各自不同，但都通过同一套外壳被编排器调用、被改进层读写。这就是「先开发基础功能，再套模板」的结构依据：<b>基础功能 = 内核，套模板 = 补四层外壳</b>。</p>
+</section>
+
+<section id="s3">
+  <h2>三、外壳四层规范</h2>
+  <p>每一层都给出：<b>字段定义 + 格式 + 必填/可选 + 职责归属</b>。四层合起来，就是一份完整的「员工定义」。</p>
+
+  <h3>① 身份层（岗位卡）</h3>
+  <table>
+    <tr><th>字段</th><th>说明</th><th>必填</th><th>归属</th></tr>
+    <tr><td><code class="inline">id</code></td><td>员工唯一标识（如 collector / parser / generator）</td><td>是</td><td>总设计师</td></tr>
+    <tr><td><code class="inline">name</code></td><td>中文岗位名（如 招标采集员）</td><td>是</td><td>总设计师</td></tr>
+    <tr><td><code class="inline">responsibility</code></td><td>一句话职责</td><td>是</td><td>总设计师</td></tr>
+    <tr><td><code class="inline">output</code></td><td>一句话产出（交付什么）</td><td>是</td><td>总设计师</td></tr>
+    <tr><td><code class="inline">coreType</code></td><td>内核类型：rule / llm / agentic（见第 4 节）</td><td>是</td><td>总设计师</td></tr>
+    <tr><td><code class="inline">autonomyBudget</code></td><td>自主性预算（见第 4 节）</td><td>是</td><td>总设计师</td></tr>
+  </table>
+
+  <h3>② 契约层（汇报接口）</h3>
+  <p>这是「连接不同工作区」的唯一硬件接口。只定义<b>形状（schema）</b>，不定义实现。</p>
+  <table>
+    <tr><th>字段</th><th>说明</th><th>必填</th></tr>
+    <tr><td><code class="inline">input</code></td><td>输入 schema：字段名、类型、必填/可选、语义说明</td><td>是</td></tr>
+    <tr><td><code class="inline">output</code></td><td>输出 schema：结构、类型、可空性、语义说明</td><td>是</td></tr>
+  </table>
+  <div class="callout warn">
+    <b>契约层的铁律</b>
+    ① 字段名和语义属于<b>稳定核心</b>，T1 一次定清，之后非破坏性变更才能加；<br>
+    ② 输入输出必须是<b>结构化 JSON</b>，禁止裸文本、禁止「输出一段话让下游自己理解」；<br>
+    ③ 可空字段（nullable）是漂移缓冲带——初期拿不准的信息先设成可选，避免破坏性变更。
+  </div>
+
+  <h3>③ 配置层（可修订 SOP）</h3>
+  <p>配置层是<b>易变边缘的容器</b>，也是「自我迭代」的抓手（原理 7）。所有会随反馈调整的东西，一律赶进这里，不进契约核心。</p>
+  <table>
+    <tr><th>字段</th><th>说明</th><th>必填</th></tr>
+    <tr><td><code class="inline">files[]</code></td><td>配置文件清单：路径 + 结构说明 + 谁能改</td><td>是</td></tr>
+    <tr><td><code class="inline">versioning</code></td><td>配置本身的版本化方式（与契约版本解耦）</td><td>是</td></tr>
+    <tr><td><code class="inline">rollback</code></td><td>回滚方式（快照 / git / 双份热切换）</td><td>是</td></tr>
+  </table>
+  <p class="small muted">例：采集员的关键词、阈值、selector 都放配置层；去重 ID 的<b>格式</b>放契约核心，去重 ID 的<b>具体实现</b>放内核。</p>
+
+  <h3>④ 观测层（绩效考核）</h3>
+  <p>观测层是「反馈闭环」的入口（原理 5）。没有它，自我迭代无从谈起。</p>
+  <table>
+    <tr><th>字段</th><th>说明</th><th>必填</th></tr>
+    <tr><td><code class="inline">metrics[]</code></td><td>指标清单：名称、类型、说明</td><td>是</td></tr>
+    <tr><td><code class="inline">reportFormat</code></td><td>上报格式（统一 json）</td><td>是</td></tr>
+    <tr><td><code class="inline">reportPath</code></td><td>上报落点，供改进层消费</td><td>是</td></tr>
+  </table>
+  <div class="callout info">
+    <b>观测指标三原则</b>
+    ① <b>可量化</b>：覆盖率、成功率、耗时、置信度，禁止「感觉不错」；<br>
+    ② <b>能驱动改进</b>：每个指标要能回答「它红了之后我改什么」；<br>
+    ③ <b>增量可加</b>：指标是可加的非破坏性字段，后来员工可以加指标，旧员工不报也不影响。
+  </div>
+</section>
+
+<section id="s4">
+  <h2>四、内核类型与自主性预算</h2>
+  <p>内核有三种类型。选择依据只有一个：<b>「下一步做什么」该由规则定，还是该由模型临场判断？</b></p>
+
+  <table>
+    <tr><th>内核类型</th><th>定义</th><th>何时用</th><th>风险</th></tr>
+    <tr><td><span class="tag-r tag-rule">规则型 rule</span></td><td>控制流由代码死定，路径可预测</td><td>采集、去重、资格比对、格式复核</td><td>低。可审计、可复现</td></tr>
+    <tr><td><span class="tag-r tag-llm">LLM 型 llm</span></td><td>单次 LLM 调用，输出被 schema 约束</td><td>需求解析、方案生成</td><td>中。需 schema 锁死 + 人复核</td></tr>
+    <tr><td><span class="tag-r tag-agent">Agentic 型 agentic</span></td><td>模型在任务内自主循环（多调工具/回读/重试）</td><td>文档疑点排查、生成后的自我核对</td><td>高。需强护栏</td></tr>
+  </table>
+
+  <h3>自主性预算（每个员工必须声明）</h3>
+  <p>自主性预算是一句显式声明，回答「这个员工最多能自己做什么、绝不能自己做什么」。它是原理 3 和原理 6 的落地。</p>
+  <table>
+    <tr><th>预算档位</th><th>含义</th><th>示例</th></tr>
+    <tr><td><b>deterministic</b></td><td>完全确定，无任何模型决策</td><td>采集员、资格评估员</td></tr>
+    <tr><td><b>suggestive</b></td><td>只产出建议，不产生副作用，最终人拍板</td><td>生成员的报价建议区间</td></tr>
+    <tr><td><b>bounded</b></td><td>可在约束内自主，但输出必过复核</td><td>解析员的需求矩阵（过复核）</td></tr>
+  </table>
+
+  <div class="callout risk">
+    <b>红线（不可逾越）</b>
+    以下三类能力<b>永远</b>是 <code class="inline">deterministic</code> 或挂在 interrupt 节点上，任何员工不得获得自主权：<br>
+    ① <b>报价</b>（只能建议区间）；② <b>关系/赢面判断</b>；③ <b>终审签字 / 递交动作</b>。
+  </div>
+
+  <div class="callout info">
+    <b>决策流程图（判定内核类型）</b>
+    ① 这一步下一步是否固定？→ 是 → <b>rule</b>；<br>
+    ② 是否只需一次「理解/生成」且能被 schema 锁死？→ 是 → <b>llm</b>；<br>
+    ③ 是否必须模型在任务内反复试错/回读？→ 是 → <b>agentic</b>（且必配护栏）。
+  </div>
+</section>
+
+<section id="s5">
+  <h2>五、契约规范</h2>
+  <p>契约是跨工作区的<b>唯一硬件接口</b>。本节规定它的文件形态、版本语义与兼容性分级。</p>
+
+  <h3>5.1 契约文件形态</h3>
+  <p>每个员工的契约是一份带版本号的 JSON 文件，放在 <code class="inline">contracts/&lt;员工id&gt;/v&lt;版本&gt;.json</code>。完整结构见附录 A。</p>
+
+  <h3>5.2 版本语义</h3>
+  <p>契约版本采用 <code class="inline">MAJOR.MINOR.PATCH</code>，但语义和软件包略有不同——<b>由「兼容性」驱动</b>：</p>
+  <table>
+    <tr><th>位</th><th>何时 +1</th><th>对旧模块的影响</th></tr>
+    <tr><td><b>PATCH</b></td><td>改说明文字、加说明性注释，schema 不变</td><td><span class="tag-r tag-additive">非破坏</span> 无影响</td></tr>
+    <tr><td><b>MINOR</b></td><td>加可选字段、加观测指标、加配置项</td><td><span class="tag-r tag-additive">非破坏</span> 旧模块继续能用，只是没用上新能力</td></tr>
+    <tr><td><b>MAJOR</b></td><td>改字段名 / 删字段 / 可选变必填 / 改语义或 ID 格式</td><td><span class="tag-r tag-breaking">破坏</span> 旧模块会崩或语义错，必须回溯</td></tr>
+  </table>
+
+  <h3>5.3 兼容性分级（每次变更必标注）</h3>
+  <div class="card">
+    <p><b>非破坏性（additive）</b> —— 加可选字段、加指标、加配置、加说明。旧模块不报错、继续用。</p>
+    <p><b>破坏性（breaking）</b> —— 改名 / 删除 / 改必填性 / 改语义 / 改共享 ID 格式。旧模块会崩或错。</p>
+    <p class="small muted">判定口诀：<b>「旧模块是否还能原样跑通？」能 → 非破坏；不能 → 破坏。</b></p>
+  </div>
+
+  <h3>5.4 稳定核心 vs 易变边缘（原理 7 的落地）</h3>
+  <table>
+    <tr><th>稳定核心（一次定清，很少变）</th><th>易变边缘（沉入配置层，随便变）</th></tr>
+    <tr><td>输入/输出字段名与语义</td><td>关键词、阈值、selector、提示词</td></tr>
+    <tr><td>去重 ID / 员工间状态字段的格式</td><td>地区/预算过滤条件</td></tr>
+    <tr><td>知识库顶层 schema</td><td>观测指标（可增量加）</td></tr>
+  </table>
+  <div class="callout principle">
+    <b>契约设计的元规则</b>
+    在 T1 写契约时问自己：<b>「这个字段，3 个月后我会想改它吗？」</b> 会 → 想办法做成可选/可配置/进配置层；不会 → 才写进稳定核心。契约核心越薄，漂移面积越小。
+  </div>
+</section>
+
+<section id="s6">
+  <h2>六、漂移管理机制</h2>
+  <p>针对「T1 的模块 A 没有按 T3 的新规范迭代」这一必然问题，本规范的答案不是冻结、也不是放任，而是：<b>版本化 + 分级 + 显式迁移</b>。</p>
+
+  <h3>6.1 六件套</h3>
+  <table>
+    <tr><th>机制</th><th>作用</th><th>一句话</th></tr>
+    <tr><td>① 契约版本化 + 模块声明版本</td><td>让「谁落后了」显式化</td><td>每个模块带 <code class="inline">implements: "collector/v1.0.0"</code></td></tr>
+    <tr><td>② 兼容性分级</td><td>决定要不要回溯</td><td>非破坏不管，破坏才进队列</td></tr>
+    <tr><td>③ 适配层（Anti-Corruption Layer）</td><td>内核永不改，改外面薄适配</td><td>契约升级 = 换适配器，不是改内核</td></tr>
+    <tr><td>④ 契约测试</td><td>自动报「谁坏了」</td><td>规范 bump 后测试一红，精确定位</td></tr>
+    <tr><td>⑤ 兼容窗口 + 显式回溯任务</td><td>升级变成排期工作项</td><td>旧模块标记 deprecated 继续跑，进 backlog</td></tr>
+    <tr><td>⑥ 注册表 registry</td><td>漂移可见</td><td>一张表看全所有员工的版本与状态</td></tr>
+  </table>
+
+  <h3>6.2 变更流程（每次契约 bump 必走）</h3>
+  <div class="flow">
+    <div class="node"><div class="t">Bump 契约版本</div><div class="d">+1 MAJOR/MINOR/PATCH</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">写 MIGRATION 记录</div><div class="d">破坏性？受影响模块清单？</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">跑契约测试</div><div class="d">自动报谁红了</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">生成回溯任务</div><div class="d">进 backlog，显式排期</div></div>
+    <span class="arrow">→</span>
+    <div class="node human"><div class="t">人拍板</div><div class="d">现在升 / 给窗口 / 适配层顶住</div></div>
+  </div>
+
+  <h3>6.3 漂移可见性：注册表</h3>
+  <p>设计师维护一份 <code class="inline">registry.json</code>，漂移必须「看得见」：</p>
+  <pre>{
+  "employees": [
+    { "id": "collector", "name": "招标采集员", "implements": "collector/v1.0.0",
+      "workspace": "爬虫工作区", "status": "current" },
+    { "id": "parser", "name": "标书解析员", "implements": "parser/v3.0.0",
+      "workspace": "解析工作区", "status": "current" }
+  ]
+}</pre>
+  <p class="small muted">status 取值：<code class="inline">current</code>（最新）/ <code class="inline">outdated</code>（落后，非破坏可继续跑）/ <code class="inline">deprecated</code>（已过兼容窗口，待下线）。</p>
+
+  <h3>6.4 改进闭环的四个护栏（原理 5 的约束）</h3>
+  <table>
+    <tr><th>护栏</th><th>作用</th></tr>
+    <tr><td>① 目标函数</td><td>改进层优化什么？覆盖率？精确率？废标拦截率？没目标就没方向</td></tr>
+    <tr><td>② 版本化 + 可回滚</td><td>每次改关键词/规则/提示词都留档，坏了一键退回</td></tr>
+    <tr><td>③ 灰度 + 人审</td><td>小改动自动生效，大改动（换数据源、改阈值）人批一下</td></tr>
+    <tr><td>④ 评估集</td><td>拿历史标注数据定期回归，防「改好这个、改坏那个」</td></tr>
+  </table>
+</section>
+
+<section id="s7">
+  <h2>七、编排规范（员工如何协作）</h2>
+  <p>编排层由总设计师维护，是「业务状态机」的机器表达。它不关心内核是 rule 还是 llm，只关心：<b>员工间的调用协议、分支、人在环节点</b>。</p>
+
+  <h3>7.1 统一调用协议</h3>
+  <p>每个员工被编排器调用时，遵循同一协议：<b>传入契约 input → 得到契约 output → 附带观测报告</b>。这让编排器无需为每个员工写胶水代码。</p>
+
+  <h3>7.2 状态机与分支</h3>
+  <p>业务链上的「决策点」映射为状态机的分支；「环节」映射为员工节点；「打回/澄清」映射为回退边。</p>
+  <div class="flow">
+    <div class="node"><div class="t">机会池</div><div class="d">采集员/预警员汇入</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">资格评估员</div><div class="d">规则型</div></div>
+    <span class="arrow">→</span>
+    <div class="node human"><div class="t">Go/No-Go</div><div class="d">人拍板</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">解析员 → 生成员 → 复核员</div><div class="d">llm → llm → rule</div></div>
+    <span class="arrow">→</span>
+    <div class="node human"><div class="t">终审</div><div class="d">人签字</div></div>
+  </div>
+
+  <h3>7.3 人在环节点（interrupt）</h3>
+  <p>编排器的 interrupt 能力是原理 6 的机器实现：<b>流程暂停、等人、人输入后继续</b>。本业务至少四个 interrupt 节点：Go/No-Go 软判断、报价、方案确认、终审签字。</p>
+</section>
+
+<section id="s8">
+  <h2>八、知识库规范（共享记忆）</h2>
+  <p>知识库是原理 1 里「记忆」的容器，也是「越用越值钱」的资产。</p>
+  <table>
+    <tr><th>库</th><th>内容</th><th>共享 schema 破坏性判定</th></tr>
+    <tr><td>资质库</td><td>营业执照、资质、人员证书（带有效期）</td><td>字段名/有效期格式变化 = 破坏</td></tr>
+    <tr><td>业绩库</td><td>历史合同、中标项目（打标）</td><td>打标维度变化 = 破坏</td></tr>
+    <tr><td>案例/方案库</td><td>可复用段落 + 图</td><td>——</td></tr>
+    <tr><td>报价库</td><td>历史报价、单位成本、毛利率</td><td>成本口径变化 = 破坏</td></tr>
+    <tr><td>客户画像库</td><td>合同、续签历史、偏好、决策人</td><td>——</td></tr>
+    <tr><td>废标条款/评分规则库</td><td>评分办法、废标条款合集</td><td>——</td></tr>
+  </table>
+  <div class="callout warn">
+    <b>共享 schema 是漂移重灾区</b>
+    知识库顶层 schema 属于「稳定核心」。它一变，所有读写它的员工（解析、生成、评估、预警）同时受影响——因此它的变更<b>默认按 MAJOR 处理</b>，必须走完整变更流程 + 受影响员工全量清单。
+  </div>
+</section>
+
+<section id="s9">
+  <h2>九、员工生命周期</h2>
+  <p>每个新员工的诞生，都走同一条路。这条路的顺序，就是「先开发基础功能，再套模板」的正规化表达。</p>
+
+  <div class="flow">
+    <div class="node"><div class="t">1. 设计师出契约</div><div class="d">岗位卡 + 契约 v1</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">2. 工位实现内核</div><div class="d">写/包代码，暴露接口</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">3. 套外壳 + 契约测试</div><div class="d">补四层 + 跑测试</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">4. 验收接入</div><div class="d">注册进 registry</div></div>
+    <span class="arrow">→</span>
+    <div class="node"><div class="t">5. 运行观测 → 迭代</div><div class="d">观测层上报，改进层反馈</div></div>
+  </div>
+
+  <h3>验收标准（一个员工何时算「交付完成」）</h3>
+  <ul class="tight">
+    <li><b>契约符合</b>：给定契约 input，输出 100% 符合 output schema；</li>
+    <li><b>观测上报</b>：每次运行产出观测报告，落点可被改进层消费；</li>
+    <li><b>声明版本</b>：带 <code class="inline">implements</code> 声明，注册进 registry；</li>
+    <li><b>配置可改</b>：配置层文件能被改进层读写并回滚；</li>
+    <li><b>红线不越</b>：自主性预算内的能力不触碰红线。</li>
+  </ul>
+
+  <h3>给「已写好但未套模板」的爬虫（你当前的状态）</h3>
+  <div class="callout principle">
+    <b>套壳适配，不是重写。</b>
+    已写好的内核不用推倒重来，只做一次「包壳」：<br>
+    ① 把现有输出包成契约要求的 output schema（通常加一个格式转换层）；<br>
+    ② 暴露观测指标；③ 把关键词/selector 抽成配置层文件；④ 声明 <code class="inline">implements</code> 版本。<br>
+    半天到一天的事，不是重写。
+  </div>
+</section>
+
+<section id="s10">
+  <h2>十、完整实例：招标采集员</h2>
+  <p>下面是「招标采集员」的完整员工定义（已落为 <code class="inline">contracts/collector/v1.json</code>）。其余员工照此模板填写。</p>
+
+  <h3>① 身份层</h3>
+  <table>
+    <tr><th>字段</th><th>值</th></tr>
+    <tr><td>id / name</td><td>collector / 招标采集员</td></tr>
+    <tr><td>responsibility</td><td>从各招标平台抓取绿植租摆公告并去重</td></tr>
+    <tr><td>output</td><td>结构化公告条目数组</td></tr>
+    <tr><td>coreType / autonomyBudget</td><td>rule / deterministic</td></tr>
+  </table>
+
+  <h3>② 契约层</h3>
+  <pre>{
+  "employee": "招标采集员",
+  "id": "collector",
+  "contractVersion": "1.0.0",
+  "coreType": "rule",
+  "autonomyBudget": "deterministic",
+  "input": {
+    "keywords":      { "type": "string[]", "required": true,  "description": "关键词列表" },
+    "platforms":     { "type": "string[]", "required": true,  "description": "平台标识列表" },
+    "dateRange":     { "type": "object",   "required": false, "description": "{start,end}" },
+    "regionFilter":  { "type": "string[]", "required": false, "description": "地区过滤" }
+  },
+  "output": {
+    "type": "array",
+    "items": {
+      "title":       { "type": "string" },
+      "platform":    { "type": "string" },
+      "url":         { "type": "string" },
+      "publishTime": { "type": "string", "format": "ISO8601" },
+      "region":      { "type": "string" },
+      "amount":      { "type": "string", "nullable": true },
+      "summary":     { "type": "string", "nullable": true },
+      "dedupId":     { "type": "string", "description": "md5(title+platform+url)" }
+    }
+  }
+}</pre>
+
+  <h3>③ 配置层</h3>
+  <table>
+    <tr><th>文件</th><th>内容</th><th>谁改</th></tr>
+    <tr><td><code class="inline">config/keywords.json</code></td><td>关键词库（改进层往里加「绿化管护」「苗木租摆」等新词）</td><td>改进层</td></tr>
+    <tr><td><code class="inline">config/platforms.json</code></td><td>平台 + selector + 代理配置（页面改版时更新）</td><td>改进层</td></tr>
+    <tr><td><code class="inline">config/filters.json</code></td><td>地区/预算/时间阈值</td><td>改进层</td></tr>
+  </table>
+
+  <h3>④ 观测层</h3>
+  <pre>{
+  "metrics": [
+    { "name": "fetched_count",         "type": "integer", "description": "本次抓取数" },
+    { "name": "dedup_new_count",       "type": "integer", "description": "去重后新增数" },
+    { "name": "platform_success_rate", "type": "object",  "description": "各平台成功率" },
+    { "name": "empty_platforms",       "type": "string[]", "description": "空结果平台（selector失效信号）" },
+    { "name": "blocked_count",         "type": "integer", "description": "403/封禁次数（反爬信号）" },
+    { "name": "elapsed_ms",            "type": "integer", "description": "耗时" }
+  ],
+  "reportFormat": "json",
+  "reportPath": "reports/collector-report.json"
+}</pre>
+  <p class="small muted">注意观测指标如何承接「自我净化」：<code class="inline">empty_platforms</code> 红 → 改进层诊断是 selector 失效还是反爬；<code class="inline">blocked_count</code> 红 → 换代理/降频。指标驱动改进，与内核是不是 agent 无关。</p>
+</section>
+
+<section id="s11">
+  <h2>附录 A · 契约 JSON Schema</h2>
+  <pre>{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "type": "object",
+  "required": ["employee","id","contractVersion","coreType","autonomyBudget","input","output"],
+  "properties": {
+    "employee":       { "type": "string" },
+    "id":             { "type": "string" },
+    "contractVersion":{ "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "coreType":       { "enum": ["rule","llm","agentic"] },
+    "autonomyBudget": { "enum": ["deterministic","suggestive","bounded"] },
+    "input":          { "type": "object" },
+    "output":         { "type": "object" },
+    "config":         { "type": "object" },
+    "observability":  { "type": "object" }
+  }
+}</pre>
+
+  <h2>附录 B · 术语表</h2>
+  <table>
+    <tr><th>术语</th><th>定义</th></tr>
+    <tr><td>员工</td><td>标准化能力单元 = 内核 + 外壳。不必然等于 agent</td></tr>
+    <tr><td>内核</td><td>能力实现（代码或 LLM 调用），因员工而异</td></tr>
+    <tr><td>外壳</td><td>身份 / 契约 / 配置 / 观测 四层，对所有员工通用</td></tr>
+    <tr><td>契约</td><td>跨工作区的机器可读接口，带版本号</td></tr>
+    <tr><td>契约漂移</td><td>规范演进后，旧模块停留在旧契约版本的现象</td></tr>
+    <tr><td>适配层</td><td>隔离内核与契约版本变化的薄转换层</td></tr>
+    <tr><td>自主性预算</td><td>员工最多能自主做什么的显式声明</td></tr>
+    <tr><td>改进层</td><td>消费观测、产出改进、写回配置层（带护栏）的一层</td></tr>
+    <tr><td>总设计师工作区</td><td>维护规范、契约、注册表、编排，不写能力代码</td></tr>
+    <tr><td>能力工位工作区</td><td>按契约实现并交付一个员工内核</td></tr>
+  </table>
+</section>
+
+<footer class="doc">
+  员工模板规范 v1.0.0 · 总设计师工作区唯一权威产出 · 一切约定以本文档 + contracts/ + registry.json 为准，聊天记录不作数。
+</footer>
+
+</div>
+</body>
+</html>

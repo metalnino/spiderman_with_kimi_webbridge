@@ -58,7 +58,12 @@ def next_slot_after(now: datetime | None = None, slots: list[tuple[int, int]] | 
 
 def _run_incremental():
     pages = os.environ.get("CRAWL_PAGES", "1")
-    cmd = [sys.executable, str(ROOT / "scripts" / "jobs" / "run_incremental.py"), "--pages", str(pages)]
+    # CRAWL_MODE=collector：调度槽跑员工壳（六站全开，含 playwright/webbridge 路由），
+    # 产出契约 output + 观测报告；否则维持原 HTTP 增量入口。
+    if os.environ.get("CRAWL_MODE") == "collector":
+        cmd = [sys.executable, str(ROOT / "scripts" / "collector_run.py")]
+    else:
+        cmd = [sys.executable, str(ROOT / "scripts" / "jobs" / "run_incremental.py"), "--pages", str(pages)]
     p = subprocess.run(cmd, cwd=str(ROOT), capture_output=True, text=True)
     # 每轮增量后重建 CRM（失败不挡主流程）
     crm = subprocess.run(

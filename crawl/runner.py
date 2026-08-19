@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import time
+from dataclasses import asdict
 
 from crawl.captcha_queue import open_todo
 from crawl.config_loader import anti_bot_cfg, only_target_cities, publish_date_range, sources_cfg, target_city_names
@@ -116,6 +117,9 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
     if err and ("captcha" in err.lower() or "rate_limited" in err.lower() or "829" in err):
         open_todo(source_id, f"source://{source_id}", title=source_id, note=err[:200])
     finish_run(run_id, status=status, item_count=stats["attempted"], note=note)
+    # 外壳适配层（collector/v1.0.0）用：原始采集数 + 过滤后入库的公告列表。
+    # 纯增量返回字段，不改动内核任何控制流；notices 为 JSON 安全 dict（含 content_hash）。
+    notice_dicts = [{**asdict(n), "content_hash": n.content_hash()} for n in notices]
     return {
         "source_id": source_id,
         "run_id": run_id,
@@ -125,6 +129,8 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
         "detail": detail_stats,
         "warm": warm_info,
         "error": err,
+        "raw_total": raw_total,
+        "notices": notice_dicts,
         **stats,
     }
 

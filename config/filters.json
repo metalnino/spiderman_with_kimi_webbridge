@@ -1,0 +1,29 @@
+{
+  "$comment": "招标采集员配置层 filterConfig —— 地区/预算/时间阈值。优先级：契约 input.dateRange/regionFilter > 本文件默认值 > 契约缺省(上次运行点至今)。改进层可改、可 git 回滚。",
+  "region": {
+    "enabled": true,
+    "mode": "whitelist",
+    "cities": [
+      "南京",
+      "上海",
+      "苏州",
+      "杭州",
+      "武汉",
+      "深圳",
+      "广州",
+      "合肥"
+    ]
+  },
+  "budget": {
+    "enabled": false,
+    "min_yuan": null,
+    "max_yuan": null,
+    "unknown_amount": "keep"
+  },
+  "date": {
+    "enabled": true,
+    "start": "2026-07-01",
+    "end": "2026-08-31",
+    "default_mode": "since_last_run"
+  }
+}
