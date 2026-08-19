@@ -1,19 +1,25 @@
-"""招标采集员 · 员工外壳（implements: collector/v1.0.0）
+"""招标采集员 · 员工外壳（implements: collector/v1.2.0）
 
 本模块是「内核 + 外壳」里的外壳（适配层），四层齐全：
-  ① 身份层   IDENTITY / IMPLEMENTS = "collector/v1.0.0"
+  ① 身份层   IDENTITY / IMPLEMENTS = "collector/v1.2.0"
   ② 契约层   校验契约 input，把内核 Notice 映射成契约 output schema
-             （title/platform/url/publishTime/region/amount/summary/dedupId）
+             （title/platform/url/publishTime/region/amount/summary/dedupId/tenderFile）
   ③ 配置层   config/keywords.json | config/platforms.json | config/filters.json（改进层可改、git 可回滚）
-  ④ 观测层   每次运行写 reports/collector-report.json，指标严格对齐契约 observability.metrics
+  ④ 观测层   每次运行写 reports/collector-report.json，指标严格对齐契约 observability.metrics（7 项）
+
+v1.1.0 对齐：publishTime 无日期 → null（不再输出空串）。
+v1.2.0 对齐：summary 由详情抓取填充；tenderFile（附件下载+正文清洗）由 crawl.tenderfile 提供；
+            观测新增 detail_fetch_success_rate（无尝试时 null，绝不编 0）。
 
 内核 = 各平台已攻克的执行路径，原样调用、不重写：
   - HTTP 平台（ccgp/chinabidding/ggzy/jsggzy）→ crawl.runner.run_source（内核原路径）
   - cebpub → scripts/crawl_cebpub_pw.main（Playwright 无头，performSearchRequest 路径）
   - jiangsu_zhaobiao → scripts/crawl_jiangsu_wb.main（WebBridge 真浏览器，JSL 两阶段路径）
 路由表见 BROWSER_ROUTES（与 config/platforms.json 的 route 字段一致）。
+详情/附件抓取（tenderFile）：crawl.tenderfile.fetch_tenderfile，HTTP 详情源站已接入，
+浏览器路由源站（cebpub/jiangsu_zhaobiao）详情需真浏览器会话、未接入，如实输出 null。
 
-红线自查：coreType=rule、autonomyBudget=deterministic；不做报价/关系/投标任何业务决策。
+红线自查：coreType=rule、autonomyBudget=deterministic；不做报价/关系/投标任何业务决策；不读招标文件语义。
 """
 from __future__ import annotations
 
@@ -33,26 +39,27 @@ sys.path.insert(0, str(ROOT / "scripts"))
 from db import connect  # noqa: E402
 
 from crawl import runner  # noqa: E402
+from crawl import tenderfile as tenderfile_mod  # noqa: E402
 from crawl.models import Notice  # noqa: E402
 from crawl.sources import REGISTRY as SOURCE_REGISTRY  # noqa: E402
 
-IMPLEMENTS = "collector/v1.0.0"
+IMPLEMENTS = "collector/v1.2.0"
 
 IDENTITY = {
     "id": "collector",
     "name": "招标采集员",
     "implements": IMPLEMENTS,
-    "contractVersion": "1.0.0",
+    "contractVersion": "1.2.0",
     "coreType": "rule",
     "autonomyBudget": "deterministic",
-    "responsibility": "从各招标平台抓取绿植租摆公告并去重",
-    "output": "结构化公告条目数组",
+    "responsibility": "从各招标平台抓取绿植租摆公告并去重，附详情抓取与招标文件下载",
+    "output": "结构化公告条目数组（含招标文件本体 tenderFile，可空）",
 }
 
-# 契约 output.items 的字段清单（顺序即输出顺序）
-OUTPUT_KEYS = ("title", "platform", "url", "publishTime", "region", "amount", "summary", "dedupId")
+# 契约 output.items 的字段清单（顺序即输出顺序；v1.2.0 新增 tenderFile）
+OUTPUT_KEYS = ("title", "platform", "url", "publishTime", "region", "amount", "summary", "dedupId", "tenderFile")
 
-# 契约 observability.metrics 的六个指标名（报告 metrics 对象必须恰好覆盖）
+# 契约 observability.metrics 的七个指标名（报告 metrics 对象必须恰好覆盖）
 METRIC_NAMES = (
     "fetched_count",
     "dedup_new_count",
@@ -60,6 +67,7 @@ METRIC_NAMES = (
     "empty_platforms",
     "blocked_count",
     "elapsed_ms",
+    "detail_fetch_success_rate",
 )
 
 REPORT_PATH = ROOT / "reports" / "collector-report.json"
@@ -253,15 +261,20 @@ def _g(n, key, default=None):
     return getattr(n, key, default)
 
 
-def _to_iso8601(v) -> str:
+def _to_iso8601(v) -> Optional[str]:
+    """时间归一化 ISO8601；无日期 → None（契约 v1.1.0：publishTime nullable，null=无法解析/无日期）。"""
     if not v:
-        return ""
+        return None
     s = str(v).strip().replace(" ", "T")
     return s[:19]
 
 
-def to_contract_item(n) -> dict:
-    """内核 Notice（或等价 dict）→ 契约 output.items。dedupId = md5(title+platform+url)（契约口径）。"""
+def to_contract_item(n, detail: Optional[dict] = None) -> dict:
+    """内核 Notice（或等价 dict）→ 契约 output.items。dedupId = md5(title+platform+url)（契约口径）。
+
+    detail 为 crawl.tenderfile.fetch_tenderfile 的返回（可空）：填充 summary / tenderFile；
+    无详情能力或抓取失败时两字段均为 null（契约 nullable，不造假）。
+    """
     title = (_g(n, "title") or "").strip()
     platform = (_g(n, "source_id") or "").strip()
     url = (_g(n, "detail_url") or _g(n, "official_url") or "").strip()
@@ -269,7 +282,8 @@ def to_contract_item(n) -> dict:
     region = (_g(n, "city") or _g(n, "province") or _g(n, "region_text") or "").strip()
     amount_text = _g(n, "amount_text")
     amount = str(amount_text).strip() if amount_text else None
-    summary = None  # 契约允许 nullable；内核暂无正文摘要能力，不造假
+    summary = (detail or {}).get("summary") or None
+    tender_file = (detail or {}).get("tenderFile") or None
     dedupId = hashlib.md5((title + platform + url).encode("utf-8")).hexdigest()
     return {
         "title": title,
@@ -280,6 +294,7 @@ def to_contract_item(n) -> dict:
         "amount": amount,
         "summary": summary,
         "dedupId": dedupId,
+        "tenderFile": tender_file,
     }
 
 
@@ -343,6 +358,82 @@ def _existing_hashes(pid: str) -> set[str]:
 
 
 # ---------------------------------------------------------------- 主流程 ---
+
+def _max_tenderfile_per_platform() -> int:
+    """每平台每轮最多做几次详情/附件抓取；0=关闭。SPIDER_MAX_TENDERFILE 或 SPIDER_MAX_DETAIL 覆盖。"""
+    for var in ("SPIDER_MAX_TENDERFILE", "SPIDER_MAX_DETAIL"):
+        v = os.environ.get(var)
+        if v:
+            try:
+                return max(0, int(v))
+            except ValueError:
+                pass
+    return 5
+
+
+def _enrich_tenderfiles(output: list[dict], run_list: list[str]) -> dict:
+    """v1.2.0 详情抓取：对 output 条目按平台尝试下载招标文件附件并回填 summary/tenderFile。
+
+    口径：
+    - 只对 HTTP 详情源站（crawl.tenderfile.HTTP_DETAIL_SOURCES）尝试；浏览器路由源站如实跳过不尝试；
+    - 每平台尝试数受 _max_tenderfile_per_platform() 封顶；
+    - 成功 = tenderFile 下载成功且 text 非空；失败如实记录 error，tenderFile=null；
+    - detail_fetch_success_rate = 成功/尝试（本轮无尝试 → null）。
+    返回 {"success_rate", "errors", "summary": {...}}。
+    """
+    limit = _max_tenderfile_per_platform()
+    if limit <= 0:
+        return {"success_rate": None, "errors": [], "summary": {"mode": "disabled", "note": "SPIDER_MAX_TENDERFILE=0"}}
+
+    per_platform: dict[str, dict] = {}
+    attempts = successes = 0
+    errors: list[str] = []
+    skipped_not_wired: list[str] = []
+
+    for item in output:
+        pid = item["platform"]
+        url = item["url"]
+        if pid in BROWSER_ROUTES:
+            if pid not in skipped_not_wired:
+                skipped_not_wired.append(pid)
+            continue
+        if pid not in tenderfile_mod.HTTP_DETAIL_SOURCES:
+            continue
+        st = per_platform.setdefault(pid, {"attempts": 0, "success": 0, "downloaded": 0, "no_url": 0, "errors": []})
+        if not url:
+            st["no_url"] += 1
+            continue
+        if st["attempts"] >= limit:
+            continue
+        st["attempts"] += 1
+        attempts += 1
+        res = tenderfile_mod.fetch_tenderfile(pid, url)
+        tf = res.get("tenderFile")
+        if tf:
+            st["downloaded"] += 1
+        if res.get("ok") and tf and (tf.get("text") or "").strip():
+            st["success"] += 1
+            successes += 1
+        else:
+            err = res.get("error") or "unknown_detail_error"
+            st["errors"].append(err)
+            errors.append(err)
+        item["summary"] = res.get("summary") or item["summary"]
+        item["tenderFile"] = tf
+
+    rate = round(successes / attempts, 3) if attempts else None
+    summary = {
+        "mode": "http",
+        "attempts": attempts,
+        "success": successes,
+        "downloaded": sum(s["downloaded"] for s in per_platform.values()),
+        "limitPerPlatform": limit,
+        "perPlatform": per_platform,
+        "skippedNotWired": skipped_not_wired,
+        "note": "浏览器路由源站（cebpub/jiangsu_zhaobiao）详情需真浏览器会话、未接入，不尝试；成功率=成功/尝试，无尝试为 null。",
+    }
+    return {"success_rate": rate, "errors": errors, "summary": summary}
+
 
 def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
     """契约 input → 契约 output + 观测报告。
@@ -424,14 +515,19 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
         out_raw.append(to_contract_item(n))
     output = dedup_items(out_raw)
 
-    # 观测指标（严格对齐契约 observability.metrics 六项）
+    # ---- v1.2.0：详情抓取 + 招标文件附件（tenderFile / summary），失败如实 null ----
+    detail_stats = _enrich_tenderfiles(output, run_list)
+
+    # 观测指标（严格对齐契约 observability.metrics 七项）
+    blocked_errors = list(errors_by_platform) + list(detail_stats["errors"])
     metrics = {
         "fetched_count": fetched_total,
         "dedup_new_count": dedup_new_total,
         "platform_success_rate": success_rate,
         "empty_platforms": empty_platforms,
-        "blocked_count": count_blocked_events(errors_by_platform),
+        "blocked_count": count_blocked_events(blocked_errors),
         "elapsed_ms": int((time.time() - t0) * 1000),
+        "detail_fetch_success_rate": detail_stats["success_rate"],
     }
 
     report = {
@@ -448,11 +544,14 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
         "perPlatform": per_platform,
         "skipped": skipped,
         "filterDrops": drop_counts,
+        "detailFetch": detail_stats["summary"],
         "missingPublishTimeCount": sum(1 for it in output if not it["publishTime"]),
         "notes": [
-            "blocked_count 口径：源站最终错误串中的 403/频控/封禁 信号数（内核内部重试期间的 403 不对外可见）。",
+            "blocked_count 口径：源站最终错误串中的 403/频控/封禁 信号数（含详情抓取环节；内核内部重试期间的 403 不对外可见）。",
             "platform_success_rate 口径：1.0=success/partial，0.0=failed/error；失败且 0 结果同时进入 empty_platforms。",
-            "publishTime 缺失时输出空串（契约该字段非 nullable；内核源站偶无日期，不改契约、不造假，见交付报告）。",
+            "publishTime 无日期输出 null（契约 v1.1.0 nullable；不造假）。",
+            "tenderFile 口径：详情页附件下载+正文清洗成功才有值；任何一步失败如实 null，error 记录原因。成功=附件下载成功且 text 非空可读。",
+            "detail_fetch_success_rate 口径：成功/尝试；本轮无尝试时为 null（不编 0）。浏览器路由源站（cebpub/jiangsu_zhaobiao）详情需真浏览器会话、未接入，不尝试、不计入。",
         ],
     }
 

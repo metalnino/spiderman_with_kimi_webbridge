@@ -1,10 +1,13 @@
-"""员工外壳契约测试 —— collector/v1.0.0（离线；不触网不触库，用 mock 覆盖内核调用）。"""
+"""员工外壳契约测试 —— collector/v1.2.0（离线；不触网不触库，用 mock 覆盖内核调用）。"""
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import sys
+import tempfile
 import unittest
+import zipfile
 from pathlib import Path
 from unittest import mock
 
@@ -31,8 +34,8 @@ def fake_notice(**kw) -> Notice:
 
 class TestIdentity(unittest.TestCase):
     def test_implements_declared(self):
-        self.assertEqual(ce.IMPLEMENTS, "collector/v1.0.0")
-        self.assertEqual(ce.IDENTITY["implements"], "collector/v1.0.0")
+        self.assertEqual(ce.IMPLEMENTS, "collector/v1.2.0")
+        self.assertEqual(ce.IDENTITY["implements"], "collector/v1.2.0")
         self.assertEqual(ce.IDENTITY["coreType"], "rule")
         self.assertEqual(ce.IDENTITY["autonomyBudget"], "deterministic")
 
@@ -92,10 +95,12 @@ class TestOutputMapping(unittest.TestCase):
         self.assertEqual(item["region"], "南京")
         self.assertEqual(item["amount"], "50000 元")
         self.assertIsNone(item["summary"])
+        self.assertIsNone(item["tenderFile"])
         for k in ("title", "platform", "url", "publishTime", "region", "dedupId"):
             self.assertIsInstance(item[k], str)
         for k in ("amount", "summary"):
             self.assertTrue(item[k] is None or isinstance(item[k], str), f"{k} 应为 string 或 null")
+        self.assertTrue(item["tenderFile"] is None or isinstance(item["tenderFile"], dict))
 
     def test_dedup_id_is_md5_of_title_platform_url(self):
         n = fake_notice()
@@ -117,7 +122,28 @@ class TestOutputMapping(unittest.TestCase):
         item = ce.to_contract_item(fake_notice(publish_date="2026-07-10 09:30:00"))
         self.assertEqual(item["publishTime"], "2026-07-10T09:30:00")
         item2 = ce.to_contract_item(fake_notice(publish_date=None))
-        self.assertEqual(item2["publishTime"], "")
+        self.assertIsNone(item2["publishTime"])  # v1.1.0：无日期 → null（不再输出空串）
+
+    def test_detail_fills_summary_and_tenderfile(self):
+        detail = {
+            "ok": True,
+            "error": None,
+            "summary": "本项目为绿植租摆服务…",
+            "tenderFile": {
+                "path": "downloads/tenderfiles/ccgp/abc.pdf",
+                "text": "第一章 招标公告……",
+                "sourceUrl": "https://example.com/abc.pdf",
+                "format": "pdf",
+            },
+        }
+        item = ce.to_contract_item(fake_notice(), detail)
+        self.assertEqual(item["summary"], "本项目为绿植租摆服务…")
+        self.assertEqual(item["tenderFile"]["format"], "pdf")
+        self.assertEqual(item["tenderFile"]["path"], "downloads/tenderfiles/ccgp/abc.pdf")
+        # 失败详情结果：不造假，两字段均 null
+        bad = ce.to_contract_item(fake_notice(), {"ok": False, "error": "no_attachment_link"})
+        self.assertIsNone(bad["summary"])
+        self.assertIsNone(bad["tenderFile"])
 
     def test_url_fallback_official(self):
         item = ce.to_contract_item(fake_notice(detail_url=None, official_url="https://x/y"))
@@ -151,7 +177,13 @@ class TestPureFilters(unittest.TestCase):
 class TestRunPipeline(unittest.TestCase):
     """整链路（mock 内核与 DB）：input → output + 观测报告，指标严格对齐契约。"""
 
-    def _run(self, notices_per_platform, status="success", err=None):
+    TF_OK = {
+        "ok": True, "error": None, "summary": "某单位绿植租摆服务采购…",
+        "tenderFile": {"path": "downloads/tenderfiles/x/a.pdf", "text": "第一章 招标公告……",
+                       "sourceUrl": "https://x/a.pdf", "format": "pdf"},
+    }
+
+    def _run(self, notices_per_platform, status="success", err=None, tf_results=None):
         n1 = fake_notice()
         n2 = fake_notice(title="第二条：花卉租摆项目")
         notices = {"chinabidding": [n1], "ccgp": [n2]}
@@ -162,7 +194,16 @@ class TestRunPipeline(unittest.TestCase):
                     "raw_total": len(got), "notices": got, "attempted": len(got),
                     "clean": {}, "detail": {}}
 
-        with mock.patch.object(ce.runner, "run_source", side_effect=fake_run_source),              mock.patch.object(ce, "_existing_hashes", return_value=set()):
+        # 详情/附件抓取离线化：默认全部成功；tf_results 可定制（如 [ok, fail]）
+        def fake_fetch_tenderfile(pid, url):
+            if tf_results:
+                r = tf_results.pop(0)
+                return r if r is not None else dict(self.TF_OK)
+            return dict(self.TF_OK)
+
+        with mock.patch.object(ce.runner, "run_source", side_effect=fake_run_source), \
+             mock.patch.object(ce, "_existing_hashes", return_value=set()), \
+             mock.patch.object(ce.tenderfile_mod, "fetch_tenderfile", side_effect=fake_fetch_tenderfile):
             return ce.run({"keywords": ["绿植租摆"], "platforms": ["chinabidding", "ccgp"],
                            "dateRange": {"start": "2026-07-01", "end": "2026-08-31"},
                            "regionFilter": ["南京", "上海", "苏州", "杭州", "武汉", "深圳", "广州", "合肥"]})
@@ -175,25 +216,48 @@ class TestRunPipeline(unittest.TestCase):
                 self.assertIsInstance(item[k], str)
             self.assertTrue(item["amount"] is None or isinstance(item["amount"], str))
             self.assertTrue(item["summary"] is None or isinstance(item["summary"], str))
+            self.assertTrue(item["tenderFile"] is None or isinstance(item["tenderFile"], dict))
+            if item["tenderFile"]:
+                for k in ("path", "text"):
+                    self.assertIsInstance(item["tenderFile"][k], str)
+                self.assertIn(item["tenderFile"]["format"], ("pdf", "docx", "txt"))
             self.assertEqual(item["dedupId"], hashlib.md5((item["title"] + item["platform"] + item["url"]).encode()).hexdigest())
         self.assertEqual(len(res["output"]), 2)
         self.assertEqual(res["output"][0]["platform"], "chinabidding")
+        # 详情抓取成功回填
+        self.assertEqual(res["output"][0]["tenderFile"]["format"], "pdf")
+        self.assertEqual(res["output"][0]["summary"], "某单位绿植租摆服务采购…")
 
     def test_report_metrics_exactly_contract(self):
         res = self._run(None)
         m = res["report"]["metrics"]
         self.assertEqual(sorted(m.keys()), sorted(ce.METRIC_NAMES))
-        # 契约 observability.metrics 的六项名字与类型
+        # 契约 observability.metrics 的七项名字与类型
         want_types = {"fetched_count": int, "dedup_new_count": int, "platform_success_rate": dict,
                       "empty_platforms": list, "blocked_count": int, "elapsed_ms": int}
         for name, typ in want_types.items():
             self.assertIsInstance(m[name], typ, f"metric {name} 类型应为 {typ}")
+        self.assertTrue(m["detail_fetch_success_rate"] is None or isinstance(m["detail_fetch_success_rate"], float))
         self.assertEqual(m["fetched_count"], 2)
         self.assertEqual(m["dedup_new_count"], 2)
         self.assertEqual(m["platform_success_rate"], {"chinabidding": 1.0, "ccgp": 1.0})
         self.assertEqual(m["empty_platforms"], [])
         self.assertEqual(m["blocked_count"], 0)
+        self.assertEqual(m["detail_fetch_success_rate"], 1.0)  # 2 尝试 2 成功
         self.assertGreaterEqual(m["elapsed_ms"], 0)
+
+    def test_detail_failures_counted_honestly(self):
+        res = self._run(None, tf_results=[
+            {"ok": False, "error": "detail_login_wall", "summary": None, "tenderFile": None},
+            dict(self.TF_OK),
+        ])
+        m = res["report"]["metrics"]
+        self.assertEqual(m["detail_fetch_success_rate"], 0.5)  # 1/2
+        # 失败条目 tenderFile=null，不造假
+        failed = [i for i in res["output"] if i["tenderFile"] is None]
+        self.assertEqual(len(failed), 1)
+        self.assertEqual(res["report"]["detailFetch"]["success"], 1)
+        self.assertEqual(res["report"]["detailFetch"]["attempts"], 2)
 
     def test_failed_platform_metrics(self):
         res = self._run(None, status="failed", err="ccgp rate_limited（连续 4 次请求均被频控，冷却阶梯已耗尽）")
@@ -203,19 +267,20 @@ class TestRunPipeline(unittest.TestCase):
         self.assertEqual(m["platform_success_rate"], {"chinabidding": 0.0, "ccgp": 0.0})
         self.assertEqual(m["empty_platforms"], ["chinabidding", "ccgp"])
         self.assertEqual(m["blocked_count"], 8)  # 每平台 4 次封禁信号
+        self.assertIsNone(m["detail_fetch_success_rate"])  # 无输出条目 → 无尝试 → null
 
     def test_dedup_new_count_vs_existing(self):
         n1 = fake_notice()
         with mock.patch.object(ce.runner, "run_source", return_value={
                 "source_id": "chinabidding", "run_id": 1, "status": "success", "error": None,
-                "raw_total": 1, "notices": [n1], "attempted": 1, "clean": {}, "detail": {}}),              mock.patch.object(ce, "_existing_hashes", return_value={n1.content_hash()}):
+                "raw_total": 1, "notices": [n1], "attempted": 1, "clean": {}, "detail": {}}), \
+             mock.patch.object(ce, "_existing_hashes", return_value={n1.content_hash()}), \
+             mock.patch.object(ce.tenderfile_mod, "fetch_tenderfile", return_value=dict(self.TF_OK)):
             res = ce.run({"keywords": ["绿植租摆"], "platforms": ["chinabidding"]})
         self.assertEqual(res["report"]["metrics"]["dedup_new_count"], 0)
         self.assertEqual(res["report"]["metrics"]["fetched_count"], 1)
 
     def test_report_file_written(self):
-        import tempfile
-
         with tempfile.TemporaryDirectory() as td:
             fake_report = Path(td) / "collector-report.json"
             with mock.patch.object(ce.runner, "run_source", return_value={
@@ -225,8 +290,9 @@ class TestRunPipeline(unittest.TestCase):
                  mock.patch.object(ce, "REPORT_PATH", fake_report):
                 res = ce.run({"keywords": ["绿植租摆"], "platforms": ["ccgp"]})
             saved = json.loads(fake_report.read_text(encoding="utf-8"))
-            self.assertEqual(saved["implements"], "collector/v1.0.0")
+            self.assertEqual(saved["implements"], "collector/v1.2.0")
             self.assertEqual(saved["metrics"]["fetched_count"], 0)
+            self.assertIsNone(saved["metrics"]["detail_fetch_success_rate"])
 
 
 class TestConfigLayer(unittest.TestCase):
@@ -414,6 +480,112 @@ class TestEnsureBridge(unittest.TestCase):
         eb.assert_called_once()
         self.assertEqual(res["status"], "success")
         self.assertEqual(calls, [1])
+
+
+class TestTenderFileKernel(unittest.TestCase):
+    """crawl.tenderfile 内核纯函数 + 附件抓取管线（离线，夹具自清理）。"""
+
+    FIXTURE_HTML = """
+    <html><body>
+      <div id="content">某单位绿植租摆服务采购项目招标公告，预算金额 50 万元，欢迎投标。</div>
+      <a href="http://static.x.com/a/login.html">登录</a>
+      <a href="/oss/download?uuid=abc123&filesource=zbwj">招标文件.pdf</a>
+      <a href="https://x.com/files/附件二：报价表.docx">附件二：报价表.docx</a>
+      <a href="https://x.com/logo.png">logo</a>
+      <a href="https://x.com/d/ann.txt">补充说明.txt</a>
+    </body></html>
+    """
+
+    def test_discover_attachment_urls(self):
+        from crawl import tenderfile as tf
+
+        found = tf.discover_attachment_urls(self.FIXTURE_HTML, "https://www.ccgp.gov.cn/cggg/dfgg/x.html")
+        urls = [u for u, _ in found]
+        self.assertEqual(len(found), 3)  # pdf/docx/txt；png/login 排除
+        self.assertIn("https://www.ccgp.gov.cn/oss/download?uuid=abc123&filesource=zbwj", urls)
+        self.assertIn("https://x.com/files/附件二：报价表.docx", urls)
+        # pdf 优先排序
+        self.assertEqual([f for _, f in found], ["pdf", "docx", "txt"])
+
+    def test_discover_none(self):
+        from crawl import tenderfile as tf
+
+        self.assertEqual(tf.discover_attachment_urls("<html><a href='/login'>登录</a></html>", "https://x.com/"), [])
+
+    def test_extract_docx_text(self):
+        from crawl import tenderfile as tf
+
+        doc_xml = (
+            '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>'
+            '<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            "<w:body><w:p><w:r><w:t>第一章 招标公告</w:t></w:r></w:p>"
+            "<w:p><w:r><w:t>预算金额：50万元</w:t></w:r></w:p></w:body></w:document>"
+        )
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("word/document.xml", doc_xml)
+        buf.seek(0)
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "t.docx"
+            p.write_bytes(buf.read())
+            text = tf.extract_docx_text(p)
+        self.assertIn("第一章 招标公告", text)
+        self.assertIn("预算金额：50万元", text)
+
+    def test_extract_pdf_text(self):
+        from crawl import tenderfile as tf
+
+        import fitz
+
+        with tempfile.TemporaryDirectory() as td:
+            p = Path(td) / "t.pdf"
+            doc = fitz.open()
+            page = doc.new_page()
+            # 默认 helv 字体不含 CJK 字形，夹具用 ASCII（被测对象是提取管线本身）
+            page.insert_text((72, 72), "TenderDoc-LVZHI-2026 body text")
+            doc.save(str(p))
+            doc.close()
+            text = tf.extract_pdf_text(p)
+        self.assertIn("TenderDoc-LVZHI-2026", text)
+
+    def test_clean_extracted_text(self):
+        from crawl import tenderfile as tf
+
+        junk = "Þÿ`Å³Á¢" * 30
+        good = "第一章 招标公告\n第二章 投标人须知"
+        self.assertNotIn("Þÿ", tf.clean_extracted_text(junk + "\n" + good))
+        self.assertIn("第一章 招标公告", tf.clean_extracted_text(junk + "\n" + good))
+
+    def test_fetch_tenderfile_no_attachment_honest(self):
+        from crawl import tenderfile as tf
+
+        body = "某单位绿植租摆服务采购项目招标公告。" * 30  # > 200 字符，绕过空页判定
+
+        class FakeHttp:
+            def get_text(self, url, headers=None):
+                return f"<html><body>{body}</body></html>"
+
+        res = tf.fetch_tenderfile("ccgp", "https://www.ccgp.gov.cn/x.html", http=FakeHttp())
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["error"], "no_attachment_link")
+        self.assertIsNone(res["tenderFile"])
+        self.assertIn("某单位绿植租摆", res["summary"])
+
+    def test_fetch_tenderfile_bad_url_honest(self):
+        from crawl import tenderfile as tf
+
+        res = tf.fetch_tenderfile("ccgp", "")
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["error"], "no_detail_url")
+        self.assertIsNone(res["tenderFile"])
+
+    def test_magic_mismatch_rejects_html_as_pdf(self):
+        from crawl import tenderfile as tf
+
+        self.assertFalse(tf._is_pdf_magic(b"<html>login page</html>" * 20))
+        self.assertTrue(tf._is_pdf_magic(b"%PDF-1.7\n" + b"x" * 500))
+        self.assertFalse(tf._is_zip_magic(b"<html>x</html>"))
+        self.assertTrue(tf._is_zip_magic(b"PK\x03\x04" + b"y" * 500))
 
 
 if __name__ == "__main__":

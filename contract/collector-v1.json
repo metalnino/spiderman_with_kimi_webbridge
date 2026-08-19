@@ -1,30 +1,40 @@
 {
-  "$comment": "招标采集员契约 v1.0.0 —— 总设计师工作区下发，爬虫工作区按此实现内核并套壳。",
+  "$comment": "招标采集员契约 v1.2.0 —— 总设计师工作区下发副本（同 contracts/collector/v1.2.0.json）。非破坏变更：output 新增 tenderFile（详情抓取+清洗+下载附件能力）。自 v1.1.0 起仅新增可空字段。",
   "employee": "招标采集员",
   "id": "collector",
-  "contractVersion": "1.0.0",
+  "contractVersion": "1.2.0",
   "coreType": "rule",
   "autonomyBudget": "deterministic",
 
   "input": {
-    "keywords":     { "type": "string[]", "required": true,  "description": "关键词列表，如 [绿植租摆, 绿植, 摆花, 绿化养护, 租摆]；具体内容由配置层 keywords.json 维护" },
-    "platforms":    { "type": "string[]", "required": true,  "description": "平台标识列表，如 [ccgp, ggzy, jsyg]；平台 selector/代理见配置层 platforms.json" },
-    "dateRange":    { "type": "object",   "required": false, "description": "{ start: ISO8601, end: ISO8601 }，缺省取上次运行点至今" },
+    "keywords":     { "type": "string[]", "required": true,  "description": "关键词列表，如 [绿植租摆, 绿植, 摆花, 绿化养护, 租摆]；由配置层 keywords.json 维护" },
+    "platforms":    { "type": "string[]", "required": true,  "description": "平台标识列表；selector/代理见配置层 platforms.json" },
+    "dateRange":    { "type": "object",   "required": false, "description": "{ start, end }，缺省取上次运行点至今" },
     "regionFilter": { "type": "string[]", "required": false, "description": "地区白名单；缺省不限" }
   },
 
   "output": {
     "type": "array",
-    "description": "去重后的结构化公告条目数组",
+    "description": "去重、清洗后的结构化公告条目数组；每条含招标文件本体（可空）",
     "items": {
       "title":       { "type": "string",             "description": "公告标题" },
       "platform":    { "type": "string",             "description": "来源平台标识" },
       "url":         { "type": "string",             "description": "公告链接" },
-      "publishTime": { "type": "string", "format": "ISO8601", "description": "发布时间" },
+      "publishTime": { "type": "string", "format": "ISO8601", "nullable": true, "description": "发布时间；null = 无法解析或无日期" },
       "region":      { "type": "string",             "description": "地区" },
-      "amount":      { "type": "string", "nullable": true, "description": "预算金额原文（可空）" },
-      "summary":     { "type": "string", "nullable": true, "description": "正文摘要（可空）" },
-      "dedupId":     { "type": "string",             "description": "去重主键：md5(title + platform + url)" }
+      "amount":      { "type": "string", "nullable": true, "description": "预算金额原文" },
+      "summary":     { "type": "string", "nullable": true, "description": "正文摘要（详情抓取后填充；暂无详情能力则 null）" },
+      "dedupId":     { "type": "string",             "description": "去重主键：md5(title + platform + url)" },
+      "tenderFile": {
+        "type": "object", "nullable": true,
+        "description": "招标文件本体（v1.2.0 详情抓取能力后填充；暂无则 null）",
+        "properties": {
+          "path": { "type": "string", "description": "下载后的招标文件路径" },
+          "text": { "type": "string", "description": "清洗后的正文（PDF/Word 提取）" },
+          "sourceUrl": { "type": "string", "nullable": true, "description": "附件原始链接" },
+          "format": { "type": "string", "enum": ["pdf", "docx", "txt"], "nullable": true }
+        }
+      }
     }
   },
 
@@ -44,9 +54,10 @@
     "metrics": [
       { "name": "fetched_count",         "type": "integer",  "description": "本次抓取总数" },
       { "name": "dedup_new_count",       "type": "integer",  "description": "去重后新增数（驱动覆盖率）" },
-      { "name": "platform_success_rate", "type": "object",   "description": "{ 平台: 成功率 }，某平台骤降为 selector 失效信号" },
+      { "name": "platform_success_rate", "type": "object",   "description": "{ 平台: 成功率 }，骤降为 selector 失效信号" },
       { "name": "empty_platforms",       "type": "string[]", "description": "空结果平台清单（selector 失效/改版信号）" },
       { "name": "blocked_count",         "type": "integer",  "description": "403/封禁次数（反爬信号）" },
+      { "name": "detail_fetch_success_rate", "type": "number", "nullable": true, "description": "详情+附件下载成功率（v1.2.0 能力后启用）" },
       { "name": "elapsed_ms",            "type": "integer",  "description": "本次耗时" }
     ]
   }

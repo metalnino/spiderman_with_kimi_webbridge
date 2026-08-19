@@ -26,7 +26,7 @@ from crawl.collector_employee import IMPLEMENTS, IDENTITY, ContractInputError, r
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="招标采集员（implements: collector/v1.0.0）")
+    ap = argparse.ArgumentParser(description="招标采集员（implements: collector/v1.2.0）")
     ap.add_argument("input", nargs="?", default=None, help="契约 input JSON 路径；'-' 为 stdin；缺省用配置层默认")
     ap.add_argument("-o", "--output", default=None, help="output 数组落盘路径（缺省只打 stdout）")
     ap.add_argument("--max-pages", type=int, default=None, help="每平台每词最大页数（默认 SPIDER_MAX_PAGES 或 1）")
