@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from crawl import ledger_data as data  # noqa: E402
 from crawl.actions import trigger_crawl, update_notice_lead  # noqa: E402
+from crawl.backfill import backfill_notice  # noqa: E402
 from crawl.captcha_flow import open_for_human, resolve_todo  # noqa: E402
 from crawl.keywords import add_keyword, delete_keyword, set_keyword_enabled, sync_config_keywords  # noqa: E402
 
@@ -55,7 +56,11 @@ def health():
         "ok": True,
         "mode": "localhost_ledger",
         "bind": os.environ.get("LEDGER_HOST", DEFAULT_HOST),
-        "write_allow": ["/api/captcha/open", "/api/captcha/done"],
+        "write_allow": [
+            "/api/captcha/open",
+            "/api/captcha/done",
+            "/api/notices/{id}/backfill",
+        ],
     }
 
 
@@ -84,6 +89,7 @@ def notices(
     limit: int = 50,
     offset: int = 0,
     target_only: bool = False,
+    stage: str | None = None,
 ):
     return data.notices(
         source_id=source_id,
@@ -99,6 +105,7 @@ def notices(
         limit=limit,
         offset=offset,
         target_only=target_only,
+        stage=stage,
     )
 
 
@@ -115,17 +122,46 @@ def notices_export(
     amount_max: float | None = None,
     sort: str = "created",
     target_only: bool = False,
+    stage: str | None = None,
 ):
     csv_text = data.export_csv(
         source_id=source_id, province=province, city=city, clean_status=clean_status,
         only_pass=only_pass, q=q, lead_status=lead_status,
         amount_min=amount_min, amount_max=amount_max, sort=sort, target_only=target_only,
+        stage=stage,
     )
     return Response(
         content=csv_text.encode("utf-8"),
         media_type="text/csv; charset=utf-8",
         headers={"Content-Disposition": "attachment; filename=notices.csv"},
     )
+
+
+@app.get("/api/notices/{notice_id}")
+def notice_detail(notice_id: int):
+    out = data.notice_detail(notice_id)
+    if out is None:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "not_found"})
+    return out
+
+
+@app.post("/api/notices/{notice_id}/backfill")
+def notice_backfill(notice_id: int):
+    out = backfill_notice(notice_id)
+    return JSONResponse(status_code=200 if out.get("ok") else 400, content=out)
+
+
+@app.get("/api/notices/{notice_id}/tenderfile")
+def notice_tenderfile(notice_id: int):
+    rel = data.tenderfile_path_for(notice_id)
+    if not rel:
+        return JSONResponse(status_code=404, content={"ok": False, "error": "no_tenderfile"})
+    p = (ROOT / rel).resolve()
+    if not str(p).startswith(str(ROOT.resolve())):
+        return JSONResponse(status_code=400, content={"ok": False, "error": "bad_path"})
+    if not p.is_file():
+        return JSONResponse(status_code=404, content={"ok": False, "error": "file_missing"})
+    return FileResponse(p)
 
 
 @app.post("/api/notices/{notice_id}/lead")

@@ -18,6 +18,15 @@ def column_exists(cur, table: str, column: str) -> bool:
     return cur.fetchone() is not None
 
 
+def index_exists(cur, table: str, index: str) -> bool:
+    cur.execute(
+        "SELECT 1 FROM information_schema.STATISTICS "
+        "WHERE TABLE_SCHEMA=%s AND TABLE_NAME=%s AND INDEX_NAME=%s LIMIT 1",
+        (load_env()["MYSQL_DATABASE"], table, index),
+    )
+    return cur.fetchone() is not None
+
+
 def main():
     conn = connect(autocommit=True)
     try:
@@ -30,12 +39,29 @@ def main():
                 ("lead_status", "ALTER TABLE notices ADD COLUMN lead_status VARCHAR(32) NOT NULL DEFAULT '待处理'"),
                 ("amount_status", "ALTER TABLE notices ADD COLUMN amount_status VARCHAR(32) NULL"),
                 ("remark", "ALTER TABLE notices ADD COLUMN remark VARCHAR(512) NULL"),
+                # P4：阶段 / 时间线 / 详情回填
+                ("notice_stage", "ALTER TABLE notices ADD COLUMN notice_stage VARCHAR(32) NULL COMMENT '阶段: intent/bidding/change/preselect/opening/candidate/result/terminated/other'"),
+                ("stage_rank", "ALTER TABLE notices ADD COLUMN stage_rank TINYINT UNSIGNED NULL COMMENT '时间线顺序'"),
+                ("project_key", "ALTER TABLE notices ADD COLUMN project_key CHAR(40) NULL COMMENT '项目时间线键 sha1(city|core)'"),
+                ("project_name", "ALTER TABLE notices ADD COLUMN project_name VARCHAR(512) NULL COMMENT '核心项目名（展示/调试）'"),
+                ("summary", "ALTER TABLE notices ADD COLUMN summary TEXT NULL COMMENT '详情正文摘要（回填）'"),
+                ("tenderfile_path", "ALTER TABLE notices ADD COLUMN tenderfile_path VARCHAR(512) NULL COMMENT '附件落盘路径（回填）'"),
+                ("detail_status", "ALTER TABLE notices ADD COLUMN detail_status VARCHAR(32) NULL COMMENT '最近一次回填状态'"),
             ]:
                 if not column_exists(cur, "notices", col):
                     cur.execute(ddl)
                     print("ADD", col)
                 else:
                     print("SKIP", col)
+            for idx, ddl in [
+                ("idx_stage", "ALTER TABLE notices ADD INDEX idx_stage (notice_stage)"),
+                ("idx_project", "ALTER TABLE notices ADD INDEX idx_project (project_key)"),
+            ]:
+                if not index_exists(cur, "notices", idx):
+                    cur.execute(ddl)
+                    print("ADD INDEX", idx)
+                else:
+                    print("SKIP INDEX", idx)
             cur.execute(
                 """
                 CREATE TABLE IF NOT EXISTS clean_events (

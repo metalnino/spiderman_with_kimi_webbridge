@@ -36,6 +36,13 @@ CREATE TABLE IF NOT EXISTS notices (
   official_url VARCHAR(1024) NULL,
   raw_json JSON NULL,
   content_hash CHAR(40) NOT NULL COMMENT '去重哈希',
+  notice_stage VARCHAR(32) NULL COMMENT '阶段: intent/bidding/change/preselect/opening/candidate/result/terminated/other',
+  stage_rank TINYINT UNSIGNED NULL COMMENT '时间线顺序',
+  project_key CHAR(40) NULL COMMENT '项目时间线键 sha1(city|core)',
+  project_name VARCHAR(512) NULL COMMENT '核心项目名（展示/调试）',
+  summary TEXT NULL COMMENT '详情正文摘要（回填）',
+  tenderfile_path VARCHAR(512) NULL COMMENT '附件落盘路径（回填）',
+  detail_status VARCHAR(32) NULL COMMENT '最近一次回填状态',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),
@@ -44,7 +51,9 @@ CREATE TABLE IF NOT EXISTS notices (
   KEY idx_city (city),
   KEY idx_publish_date (publish_date),
   KEY idx_keyword (keyword),
-  KEY idx_bid_status (bid_status)
+  KEY idx_bid_status (bid_status),
+  KEY idx_stage (notice_stage),
+  KEY idx_project (project_key)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 CREATE TABLE IF NOT EXISTS entities (

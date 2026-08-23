@@ -1,6 +1,7 @@
 """Read-only ledger queries for local API (MySQL → JSON-ready dicts)."""
 from __future__ import annotations
 
+import re
 import sys
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -14,9 +15,22 @@ from db import connect  # noqa: E402
 from crawl.config_loader import target_city_names
 from crawl.filters import PROVINCE_CITY, source_capability_hint
 from crawl.sources import enabled_source_ids
+from crawl.stage import STAGE_LABELS, STAGES  # noqa: E402
 
 NEW_HOURS = 48
 MAX_LIMIT = 200
+MAX_FOLD_ROWS = 2000  # 折叠在 Python 侧做：单次最多拉取的原始行数（超过则截断并提示）
+
+
+def _norm_title(t: str | None) -> str:
+    """跨站折叠用的标题规范化：去空白/全角空格/制表符/不换行空格。"""
+    return re.sub(r"[\s\u3000\t\u00a0]", "", t or "")
+
+
+# 与 _norm_title 等价的 SQL 表达式（用于 GROUP BY 总数统计）
+# 注意：不能用 CHAR(0x00A0)/CONVERT 构造——二进制字节当 UTF-8 解析会返回 NULL；
+# 直接用 Unicode 字面量，pymysql 以 utf8mb4 发送即可匹配。
+_FOLD_SQL = "TRIM(REPLACE(REPLACE(REPLACE(REPLACE(title,' ',''),'\u3000',''),'\\t',''),'\u00a0',''))"
 
 
 def _jsonable(v: Any) -> Any:
@@ -71,6 +85,7 @@ def meta() -> dict:
         "sources": enabled_source_ids(),
         "new_hours": NEW_HOURS,
         "hints": {s: source_capability_hint(s) for s in ("chinabidding", "cebpub")},
+        "stages": [{"key": k, "label": lbl} for k, _rank, lbl, _words in STAGES],
     }
 
 
@@ -108,7 +123,8 @@ def summary() -> dict:
 NOTICE_SELECT = (
     "id, title, source_id, source_name, city, province, keyword, publish_date, "
     "created_at, detail_url, official_url, clean_status, clean_reason, manual_label, "
-    "amount, amount_text, buyer, agency, project_code, read_at, lead_status, amount_status, remark"
+    "amount, amount_text, buyer, agency, project_code, read_at, lead_status, amount_status, "
+    "remark, notice_stage, stage_rank"
 )
 
 _SORTS = {
@@ -121,6 +137,7 @@ _SORTS = {
 def _build_notices_where(
     source_id=None, province=None, city=None, clean_status=None, only_pass=False,
     q=None, lead_status=None, amount_min=None, amount_max=None, target_only=False,
+    stage=None,
 ) -> tuple[str, list[Any]]:
     where = ["1=1"]
     args: list[Any] = []
@@ -164,7 +181,60 @@ def _build_notices_where(
     if q:
         where.append("title LIKE %s")
         args.append(f"%{q}%")
+    if stage:
+        where.append("notice_stage=%s")
+        args.append(stage)
     return " AND ".join(where), args
+
+
+def _fold_notices(rows: list[dict], sort: str) -> list[dict]:
+    """跨站视图折叠：同规范化标题 + 同城 → 一条主行（多源标注）。
+
+    主行选择：有金额者优先，其次发布时间早者，最后 id 小者。
+    折叠只发生在结果集内部（随筛选动态变化），不动存储。
+    """
+    groups: dict[tuple[str, str], list[dict]] = {}
+    for r in rows:
+        key = (_norm_title(r.get("title")), r.get("city") or "")
+        groups.setdefault(key, []).append(r)
+
+    folded: list[dict] = []
+    for members in groups.values():
+        if len(members) == 1:
+            folded.append(members[0])
+            continue
+        members_sorted = sorted(
+            members,
+            key=lambda m: (
+                m.get("amount") is None,  # 有金额的排前
+                not (m.get("publish_date") or ""),  # 有发布时间的排前
+                m.get("publish_date") or "",
+                m.get("id") or 0,
+            ),
+        )
+        primary = members_sorted[0]
+        primary["dup_count"] = len(members)
+        primary["sources"] = sorted({m.get("source_id") for m in members if m.get("source_id")})
+        primary["duplicates"] = [
+            {
+                "id": m.get("id"),
+                "source_id": m.get("source_id"),
+                "source_name": m.get("source_name"),
+                "detail_url": m.get("detail_url"),
+                "official_url": m.get("official_url"),
+                "publish_date": m.get("publish_date"),
+            }
+            for m in members_sorted[1:]
+        ]
+        folded.append(primary)
+
+    if sort == "publish":
+        folded.sort(key=lambda r: (not (r.get("publish_date") or ""), r.get("publish_date") or ""), reverse=True)
+    elif sort == "amount":
+        folded.sort(key=lambda r: (r.get("amount") is None, -(r.get("amount") or 0)))
+    else:
+        folded.sort(key=lambda r: r.get("created_at") or "", reverse=True)
+    return folded
 
 
 def notices(
@@ -182,18 +252,32 @@ def notices(
     limit: int = 50,
     offset: int = 0,
     target_only: bool = False,
+    stage: str | None = None,
 ) -> dict:
     limit = clamp_limit(limit)
     offset = clamp_offset(offset)
-    wsql, args = _build_notices_where(source_id, province, city, clean_status, only_pass, q, lead_status, amount_min, amount_max, target_only)
-    order = _SORTS.get(sort, _SORTS["created"])
-    total = int(_one(f"SELECT COUNT(*) AS c FROM notices WHERE {wsql}", tuple(args)) or 0)
-    rows = _rows(
-        f"SELECT {NOTICE_SELECT} FROM notices WHERE {wsql} ORDER BY {order} LIMIT %s OFFSET %s",
-        tuple(args) + (limit, offset),
+    wsql, args = _build_notices_where(
+        source_id, province, city, clean_status, only_pass, q,
+        lead_status, amount_min, amount_max, target_only, stage,
     )
+    order = _SORTS.get(sort, _SORTS["created"])
+    total = int(
+        _one(
+            f"SELECT COUNT(*) AS c FROM (SELECT 1 AS one FROM notices WHERE {wsql} "
+            f"GROUP BY {_FOLD_SQL}, IFNULL(city,'')) x",
+            tuple(args),
+        )
+        or 0
+    )
+    rows = _rows(
+        f"SELECT {NOTICE_SELECT} FROM notices WHERE {wsql} ORDER BY {order} LIMIT {MAX_FOLD_ROWS}",
+        tuple(args),
+    )
+    truncated = len(rows) >= MAX_FOLD_ROWS
+    folded = _fold_notices(rows, sort)
+    items = folded[offset:offset + limit]
     cutoff = datetime.now() - timedelta(hours=NEW_HOURS)
-    for r in rows:
+    for r in items:
         ca = r.get("created_at")
         is_new = False
         if isinstance(ca, str):
@@ -203,7 +287,54 @@ def notices(
                 is_new = False
         r["is_new"] = is_new
         r["capability_hint"] = source_capability_hint(r.get("source_id") or "")
-    return {"total": total, "limit": limit, "offset": offset, "items": rows}
+        st = r.get("notice_stage")
+        r["stage_label"] = STAGE_LABELS.get(st, st or "其他")
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "items": items,
+        "folded": True,
+        "truncated": truncated,
+    }
+
+
+FULL_NOTICE_SELECT = (
+    "id, source_id, source_name, external_id, title, publish_date, open_time, deadline, "
+    "province, city, region_text, keyword, notice_stage, stage_rank, bid_status, "
+    "clean_status, clean_reason, manual_label, read_at, lead_status, amount_status, "
+    "remark, amount, amount_text, buyer, agency, project_code, notice_type, "
+    "detail_url, official_url, project_key, project_name, summary, tenderfile_path, "
+    "detail_status, created_at, updated_at"
+)
+
+
+def notice_detail(notice_id: int) -> dict | None:
+    """单条详情 + 同项目时间线（供详情抽屉）。"""
+    row = _rows(
+        f"SELECT {FULL_NOTICE_SELECT} FROM notices WHERE id=%s",
+        (notice_id,),
+    )
+    if not row:
+        return None
+    n = row[0]
+    n["stage_label"] = STAGE_LABELS.get(n.get("notice_stage"), "其他")
+    timeline: list[dict] = []
+    if n.get("project_key"):
+        timeline = _rows(
+            "SELECT id, title, source_id, source_name, notice_stage, stage_rank, "
+            "publish_date, detail_url, official_url, lead_status, read_at "
+            "FROM notices WHERE project_key=%s ORDER BY stage_rank, publish_date, id",
+            (n["project_key"],),
+        )
+    for t in timeline:
+        t["stage_label"] = STAGE_LABELS.get(t.get("notice_stage"), "其他")
+    return {"notice": n, "timeline": timeline}
+
+
+def tenderfile_path_for(notice_id: int) -> str | None:
+    """返回 tenderfile_path（相对项目根、正斜杠），无则 None。"""
+    return _one("SELECT tenderfile_path AS p FROM notices WHERE id=%s", (notice_id,))
 
 
 def export_csv(**filters) -> str:
@@ -214,18 +345,19 @@ def export_csv(**filters) -> str:
         filters.get("source_id"), filters.get("province"), filters.get("city"),
         filters.get("clean_status"), filters.get("only_pass"), filters.get("q"),
         filters.get("lead_status"), filters.get("amount_min"), filters.get("amount_max"),
-        filters.get("target_only"),
+        filters.get("target_only"), filters.get("stage"),
     )
     order = _SORTS.get(filters.get("sort"), _SORTS["created"])
     rows = _rows(f"SELECT {NOTICE_SELECT} FROM notices WHERE {wsql} ORDER BY {order} LIMIT 5000", tuple(args))
     buf = io.StringIO()
     w = csv.writer(buf)
-    w.writerow(["ID", "标题", "源站", "城市", "省", "关键词", "发布时间", "首次发现", "金额(元)", "金额文本",
+    w.writerow(["ID", "标题", "源站", "城市", "省", "关键词", "阶段", "发布时间", "首次发现", "金额(元)", "金额文本",
                 "招标人", "代理", "项目编号", "处理状态", "金额确认", "已读", "详情链接", "原文链接"])
     for r in rows:
         w.writerow([
             r.get("id"), r.get("title"), r.get("source_id"), r.get("city"), r.get("province"),
-            r.get("keyword"), r.get("publish_date"), r.get("created_at"), r.get("amount"),
+            r.get("keyword"), STAGE_LABELS.get(r.get("notice_stage"), "其他"),
+            r.get("publish_date"), r.get("created_at"), r.get("amount"),
             r.get("amount_text"), r.get("buyer"), r.get("agency"), r.get("project_code"),
             r.get("lead_status"), r.get("amount_status"), r.get("read_at"),
             r.get("detail_url"), r.get("official_url"),

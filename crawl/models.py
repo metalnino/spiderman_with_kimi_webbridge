@@ -5,6 +5,8 @@ import json
 from dataclasses import asdict, dataclass, field
 from typing import Any, Optional
 
+from crawl.stage import classify_stage, project_key
+
 
 @dataclass
 class Notice:
@@ -50,6 +52,12 @@ class Notice:
         raw = d.pop("raw", {}) or {}
         d["content_hash"] = self.content_hash()
         d["raw_json"] = json.dumps(raw, ensure_ascii=False) if raw else None
+        stage, rank = classify_stage(self.title, self.notice_type)
+        pkey, core = project_key(self.title, self.city)
+        d["notice_stage"] = stage
+        d["stage_rank"] = rank
+        d["project_key"] = pkey
+        d["project_name"] = core[:500] if core else None
         # MySQL DATETIME: accept 'YYYY-MM-DD' or full; empty -> None
         for k in ("publish_date", "open_time", "deadline"):
             v = d.get(k)

@@ -92,7 +92,7 @@ def detail_sources() -> set[str]:
 
 
 def fetch_detail(source_id: str, detail_url: str) -> dict:
-    """抓取并解析详情字段；失败/不支持返回空 dict。"""
+    """抓取并解析详情字段；失败/不支持返回空 dict（或含 _error 的 dict）。"""
     if source_id == "ccgp":
         http = HttpSession("ccgp")
         try:
@@ -108,7 +108,33 @@ def fetch_detail(source_id: str, detail_url: str) -> dict:
         else:
             html = raw.decode("utf-8", "ignore")
         return parse_ccgp_detail(html)
-    # 其余站详情待接入（见模块 docstring）
+    if source_id == "chinabidding":
+        # P3 已开发的采招 Cookie 详情模块（登录墙/异常如实带 _error）
+        from crawl.sources.chinabidding_detail import fetch_detail_fields
+
+        r = fetch_detail_fields(detail_url)
+        if r.get("error"):
+            return {"_error": str(r["error"])[:120]}
+        if r.get("login_wall"):
+            return {"_error": "login_wall"}
+        out: dict = {}
+        for k in ("project_code", "buyer", "agency"):
+            v = r.get(k)
+            if v and "立即注册" not in str(v):
+                out[k] = str(v).strip()
+        at = r.get("amount_text")
+        if at and "立即注册" not in str(at):
+            out["amount_text"] = str(at).strip()
+            m = re.match(r"^([\d,\.]+)\s*(万元|万|元)?$", str(at).strip())
+            if m:
+                try:
+                    num = float(m.group(1).replace(",", ""))
+                except ValueError:
+                    num = None
+                if num is not None:
+                    out["amount"] = num * 10000 if m.group(2) in ("万元", "万") else num
+        return out
+    # 其余站字段回填走按需桥路径（crawl/backfill.py），此处不支持
     return {}
 
 

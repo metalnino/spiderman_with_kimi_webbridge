@@ -18,13 +18,13 @@ INSERT INTO notices (
   source_id, source_name, external_id, title, publish_date, open_time, deadline,
   province, city, region_text, keyword, bid_status, amount, amount_text,
   buyer, agency, project_code, notice_type, detail_url, official_url,
-  raw_json, content_hash
+  raw_json, content_hash, notice_stage, stage_rank, project_key, project_name
 ) VALUES (
   %(source_id)s, %(source_name)s, %(external_id)s, %(title)s, %(publish_date)s,
   %(open_time)s, %(deadline)s, %(province)s, %(city)s, %(region_text)s,
   %(keyword)s, %(bid_status)s, %(amount)s, %(amount_text)s, %(buyer)s,
   %(agency)s, %(project_code)s, %(notice_type)s, %(detail_url)s, %(official_url)s,
-  %(raw_json)s, %(content_hash)s
+  %(raw_json)s, %(content_hash)s, %(notice_stage)s, %(stage_rank)s, %(project_key)s, %(project_name)s
 )
 ON DUPLICATE KEY UPDATE
   title=VALUES(title),
@@ -39,6 +39,10 @@ ON DUPLICATE KEY UPDATE
   agency=IFNULL(VALUES(agency), agency),
   detail_url=IFNULL(VALUES(detail_url), detail_url),
   official_url=IFNULL(VALUES(official_url), official_url),
+  notice_stage=VALUES(notice_stage),
+  stage_rank=VALUES(stage_rank),
+  project_key=VALUES(project_key),
+  project_name=VALUES(project_name),
   raw_json=VALUES(raw_json),
   updated_at=CURRENT_TIMESTAMP
 """

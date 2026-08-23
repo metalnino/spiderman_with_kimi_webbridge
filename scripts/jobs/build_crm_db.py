@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from db import connect  # noqa: E402
+from crawl.ledger_data import _norm_title  # noqa: E402  (P4 折叠键：同题同城计一次)
 
 OUT_HTML = ROOT / "data" / "web" / "crm.html"
 CFG = json.loads((ROOT / "config" / "crm_config.json").read_text(encoding="utf-8"))
@@ -125,6 +126,8 @@ def main():
             cur.execute("DELETE FROM entities")
             for key, hist in buckets.items():
                 name = pick_display_name(name_variants[key])[:256]
+                # P4：公告数按跨站折叠去重（同题+同城计一次），与线索工作台口径一致
+                folded_count = len({(_norm_title(h.get("title")), h.get("city") or "") for h in hist})
                 times = [parse_dt(h.get("publish_date") or h.get("created_at")) for h in hist]
                 times = sorted([t for t in times if t])
                 cities = [h.get("city") for h in hist if h.get("city")]
@@ -162,7 +165,7 @@ def main():
                         name,
                         city or "",
                         province,
-                        len(hist),
+                        folded_count,
                         last.strftime("%Y-%m-%d %H:%M:%S") if last else None,
                         next_hint,
                         json.dumps(meta, ensure_ascii=False),
@@ -173,7 +176,7 @@ def main():
                         "name": name,
                         "city": city,
                         "province": province,
-                        "notice_count": len(hist),
+                        "notice_count": folded_count,
                         "last_notice_at": last.isoformat(timespec="seconds") if last else None,
                         "next_bid_hint": next_hint,
                         "service_tags": service_tags,
