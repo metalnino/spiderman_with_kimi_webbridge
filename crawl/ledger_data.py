@@ -304,8 +304,8 @@ FULL_NOTICE_SELECT = (
     "province, city, region_text, keyword, notice_stage, stage_rank, bid_status, "
     "clean_status, clean_reason, manual_label, read_at, lead_status, amount_status, "
     "remark, amount, amount_text, buyer, agency, project_code, notice_type, "
-    "detail_url, official_url, project_key, project_name, summary, tenderfile_path, "
-    "detail_status, created_at, updated_at"
+    "detail_url, official_url, original_url, origin_source, project_key, project_name, "
+    "summary, tenderfile_path, detail_status, created_at, updated_at"
 )
 
 

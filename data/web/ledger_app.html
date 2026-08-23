@@ -352,7 +352,8 @@ function renderDrawer(d) {
     '阶段：'+(n.stage_label||'其他')+' · 源站：'+(n.source_id||'-')+' · 入库：'+(n.created_at||'-');
   const links = [];
   if (n.detail_url) links.push('<a href="'+esc(n.detail_url)+'" target="_blank">详情页</a>');
-  if (n.official_url && n.official_url !== n.detail_url) links.push('<a href="'+esc(n.official_url)+'" target="_blank">原文</a>');
+  if (n.original_url && n.original_url !== n.detail_url) links.push('<a href="'+esc(n.original_url)+'" target="_blank">原发</a>');
+  if (n.official_url && n.official_url !== n.detail_url && n.official_url !== n.original_url) links.push('<a href="'+esc(n.official_url)+'" target="_blank">原文</a>');
   let fields = '<h3>基本信息</h3><dl class="dl">';
   fields += dlRow('城市', fmtDateTime(n.city||''));
   fields += dlRow('省份', fmtDateTime(n.province||''));
@@ -370,6 +371,7 @@ function renderDrawer(d) {
   fields += dlRow('关键词', fmtDateTime(n.keyword||''));
   fields += dlRow('清洗状态', fmtDateTime((n.clean_status||'-')+(n.clean_reason?' ('+n.clean_reason+')':'')));
   fields += dlRow('项目名', fmtDateTime(n.project_name||''));
+  fields += dlRow('原发来源', fmtDateTime(n.origin_source||''));
   fields += dlRow('原文链接', links.join(' · ') || '-');
   fields += '</dl>';
 

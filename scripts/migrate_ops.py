@@ -47,6 +47,9 @@ def main():
                 ("summary", "ALTER TABLE notices ADD COLUMN summary TEXT NULL COMMENT '详情正文摘要（回填）'"),
                 ("tenderfile_path", "ALTER TABLE notices ADD COLUMN tenderfile_path VARCHAR(512) NULL COMMENT '附件落盘路径（回填）'"),
                 ("detail_status", "ALTER TABLE notices ADD COLUMN detail_status VARCHAR(32) NULL COMMENT '最近一次回填状态'"),
+                # P5：原发寻址
+                ("original_url", "ALTER TABLE notices ADD COLUMN original_url VARCHAR(1024) NULL COMMENT '原发站链接（转载行寻址结果）'"),
+                ("origin_source", "ALTER TABLE notices ADD COLUMN origin_source VARCHAR(128) NULL COMMENT '原发来源（平台/单位名）'"),
             ]:
                 if not column_exists(cur, "notices", col):
                     cur.execute(ddl)

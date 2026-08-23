@@ -43,6 +43,8 @@ CREATE TABLE IF NOT EXISTS notices (
   summary TEXT NULL COMMENT '详情正文摘要（回填）',
   tenderfile_path VARCHAR(512) NULL COMMENT '附件落盘路径（回填）',
   detail_status VARCHAR(32) NULL COMMENT '最近一次回填状态',
+  original_url VARCHAR(1024) NULL COMMENT '原发站链接（转载行寻址结果）',
+  origin_source VARCHAR(128) NULL COMMENT '原发来源（平台/单位名）',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

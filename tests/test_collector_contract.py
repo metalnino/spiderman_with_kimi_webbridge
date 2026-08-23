@@ -183,6 +183,25 @@ class TestRunPipeline(unittest.TestCase):
                        "sourceUrl": "https://x/a.pdf", "format": "pdf"},
     }
 
+    @classmethod
+    def setUpClass(cls):
+        # 报告/历史/简报一律写临时目录，绝不污染生产 reports/（P5 修正）
+        cls._td = tempfile.TemporaryDirectory()
+        td = Path(cls._td.name)
+        cls._patchers = [
+            mock.patch.object(ce, "REPORT_PATH", td / "collector-report.json"),
+            mock.patch.object(ce, "REPORT_HISTORY_DIR", td / "history"),
+            mock.patch.object(ce, "BRIEFING_PATH", td / "briefing.jsonl"),
+        ]
+        for p in cls._patchers:
+            p.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        for p in cls._patchers:
+            p.stop()
+        cls._td.cleanup()
+
     def _run(self, notices_per_platform, status="success", err=None, tf_results=None):
         n1 = fake_notice()
         n2 = fake_notice(title="第二条：花卉租摆项目")
@@ -374,7 +393,10 @@ class TestPlatformRouting(unittest.TestCase):
         })
         with mock.patch.dict(ce.BROWSER_ROUTES, {"jiangsu_zhaobiao": {"route": "webbridge", "module": "fake_mod"}}), \
              mock.patch.dict(sys.modules, {"fake_mod": fake_mod}), \
-             mock.patch.object(ce, "_existing_hashes", return_value=set()):
+             mock.patch.object(ce, "_existing_hashes", return_value=set()), \
+             mock.patch.object(ce, "REPORT_PATH", Path(tempfile.mkdtemp()) / "collector-report.json"), \
+             mock.patch.object(ce, "REPORT_HISTORY_DIR", Path(tempfile.mkdtemp())), \
+             mock.patch.object(ce, "BRIEFING_PATH", Path(tempfile.mkdtemp()) / "briefing.jsonl"):
             res = ce.run({"keywords": ["绿植租摆"], "platforms": ["jiangsu_zhaobiao"]})
         m = res["report"]["metrics"]
         self.assertEqual(m["fetched_count"], 0)
@@ -586,6 +608,484 @@ class TestTenderFileKernel(unittest.TestCase):
         self.assertTrue(tf._is_pdf_magic(b"%PDF-1.7\n" + b"x" * 500))
         self.assertFalse(tf._is_zip_magic(b"<html>x</html>"))
         self.assertTrue(tf._is_zip_magic(b"PK\x03\x04" + b"y" * 500))
+
+
+class TestTenderFileModes(unittest.TestCase):
+    """详情抓取路由：ggzy b 页 HTTP / WebBridge / cebpub vaptcha 阻塞（全离线）。"""
+
+    def test_ggzy_detail_page_url(self):
+        from crawl import tenderfile as tf
+
+        a = "https://www.ggzy.gov.cn/information/deal/html/a/0067/0101/20260724/00676585f1c7c6084cae90d1987a8b2414d4.html"
+        self.assertEqual(
+            tf.ggzy_detail_page_url(a),
+            "https://www.ggzy.gov.cn/information/deal/html/b/0067/0101/20260724/00676585f1c7c6084cae90d1987a8b2414d4.html",
+        )
+        self.assertEqual(tf.ggzy_detail_page_url("https://www.ggzy.gov.cn/information/deal/html/b/x/y/1.html"),
+                         "https://www.ggzy.gov.cn/information/deal/html/b/x/y/1.html")
+        self.assertIsNone(tf.ggzy_detail_page_url("https://other.example.com/x.html"))
+
+    def test_cebpub_vaptcha_gate_registers_todo(self):
+        from crawl import tenderfile as tf
+
+        shell = {"text": "首页|联系我们 ×", "links": [], "cookie": "", "session": "s1"}
+        with mock.patch.object(tf, "_bridge_page", return_value=dict(shell)), \
+             mock.patch("crawl.captcha_queue.open_todo") as todo:
+            res = tf.fetch_tenderfile("cebpub", "https://ctbpsp.com/#/bulletinDetail?uuid=x")
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["error"], "detail_vaptcha_gated")
+        self.assertIsNone(res["tenderFile"])
+        self.assertTrue(todo.called)  # vaptcha 人工验证登记待办，绝不绕过
+
+    def test_cebpub_des_decrypt(self):
+        from crawl import tenderfile as tf
+
+        from Crypto.Cipher import DES
+
+        import base64
+
+        key = tf.CEBPUB_DES_KEY
+        plain = '{"success":true,"data":"https://file.example.com/a.pdf"}'.encode()
+        pad = 8 - len(plain) % 8
+        plain += bytes([pad]) * pad
+        enc = DES.new(key, DES.MODE_ECB).encrypt(plain)
+        self.assertEqual(
+            tf.cebpub_des_decrypt(base64.b64encode(enc).decode()),
+            '{"success":true,"data":"https://file.example.com/a.pdf"}',
+        )
+
+    def test_cebpub_bridge_attachment_after_vaptcha(self):
+        from crawl import tenderfile as tf
+
+        import fitz
+
+        with tempfile.TemporaryDirectory() as td:
+            pdf = Path(td) / "t.pdf"
+            doc = fitz.open()
+            pg = doc.new_page()
+            pg.insert_text((72, 72), "Cebpub bulletin attachment 2026")
+            doc.save(str(pdf))
+            doc.close()
+            pdf_bytes = pdf.read_bytes()
+
+        rendered = {"text": "某项目招标公告 正文内容 一、招标条件 本项目已具备招标条件，现进行公开招标。" * 6,
+                    "links": [{"t": "下载", "h": "https://file.cebpubservice.com/x.pdf", "on": ""}],
+                    "cookie": "", "session": "s1"}
+
+        class FakeFailHttp:
+            def request(self, url, headers=None, **kw):
+                raise RuntimeError("offline in test")
+
+        with mock.patch.object(tf, "_bridge_page", return_value=dict(rendered)), \
+             mock.patch.object(tf, "HttpSession", return_value=FakeFailHttp()), \
+             mock.patch.object(tf, "_bridge_download_b64", return_value=(pdf_bytes, "")), \
+             mock.patch.object(tf, "time", mock.MagicMock()):
+            res = tf.fetch_tenderfile("cebpub", "https://ctbpsp.com/#/bulletinDetail?uuid=y")
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["tenderFile"]["format"], "pdf")
+        self.assertIn("Cebpub bulletin attachment", res["tenderFile"]["text"])
+        Path(ROOT / res["tenderFile"]["path"]).unlink(missing_ok=True)
+
+    def _fake_http(self, page_html="", attachment_bytes=b""):
+        calls = []
+
+        class FakeHttp:
+            def get_text(self, url, headers=None):
+                calls.append(("text", url))
+                return page_html
+
+            def request(self, url, headers=None, **kw):
+                calls.append(("raw", url))
+                return 200, attachment_bytes, url
+
+        return FakeHttp(), calls
+
+    def test_fetch_ggzy_http_full_pipeline(self):
+        from crawl import tenderfile as tf
+
+        import fitz
+
+        with tempfile.TemporaryDirectory() as td:
+            pdf = Path(td) / "t.pdf"
+            doc = fitz.open()
+            page = doc.new_page()
+            page.insert_text((72, 72), "GGZY TenderDoc body text 2026")
+            doc.save(str(pdf))
+            doc.close()
+            pdf_bytes = pdf.read_bytes()
+
+        b_html = (
+            "<html><body><h4>某单位绿植租摆服务招标公告</h4><p>一、招标条件 本项目资金来源为自筹资金，"
+            "现进行公开招标。二、项目概况 预算 50 万元，采购绿植租摆及绿化养护服务，服务期一年，"
+            "投标人须具备独立法人资格，本项目不接受联合体投标，开标时间另行通知，详见招标文件。</p>"
+            '<a href="/oss/download?uuid=abc&filesource=1">招标文件.pdf</a></body></html>'
+        )
+        fake_http, calls = self._fake_http(b_html, pdf_bytes)
+        a_url = "https://www.ggzy.gov.cn/information/deal/html/a/0067/0101/20260724/00676585f1c7c6084cae90d1987a8b2414d4.html"
+        res = tf.fetch_tenderfile("ggzy", a_url, http=fake_http)
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["tenderFile"]["format"], "pdf")
+        self.assertIn("GGZY TenderDoc", res["tenderFile"]["text"])
+        self.assertIn("/html/b/", calls[0][1])  # 抓的是 b 页
+        # 夹具自清理
+        Path(ROOT / res["tenderFile"]["path"]).unlink(missing_ok=True)
+
+    def test_fetch_ggzy_http_no_attachment_honest_summary(self):
+        from crawl import tenderfile as tf
+
+        b_html = "<html><body><p>" + ("某公告正文，无附件。" * 30) + "</p></body></html>"
+        fake_http, _ = self._fake_http(b_html)
+        res = tf.fetch_tenderfile("ggzy", "https://www.ggzy.gov.cn/information/deal/html/a/1/2/20260724/x.html", http=fake_http)
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["error"], "no_attachment_link")
+        self.assertIsNone(res["tenderFile"])
+        self.assertIn("某公告正文", res["summary"])
+
+    def test_fetch_via_bridge_member_wall_honest(self):
+        from crawl import tenderfile as tf
+
+        page = {"text": "绿化租摆和园区除草 发布日期：2026-08-18 招标编号：【正式会员“登录”后可浏览】 正文摘要……" * 5,
+                "links": [], "cookie": "", "session": "s1"}
+        with mock.patch("crawl.webbridge_client.ensure_bridge", return_value={"bridge": True, "extensions": 1}), \
+             mock.patch("crawl.webbridge_client.navigate", return_value={"ok": True}), \
+             mock.patch("crawl.webbridge_client.evaluate", return_value={"ok": True, "data": {"value": json.dumps(page, ensure_ascii=False)}}), \
+             mock.patch("crawl.webbridge_client.export_document_cookie", return_value={"ok": True, "cookie": ""}), \
+             mock.patch("db.load_env", return_value={"JIANGSU_ZHAOBIAO_USER": "u1", "JIANGSU_ZHAOBIAO_PASS": "p1"}), \
+             mock.patch.object(tf, "_jiangsu_bridge_login_ocr", return_value="captcha_wrong_loop"), \
+             mock.patch.object(tf, "ensure_jiangsu_login", return_value="need_human_captcha"), \
+             mock.patch.object(tf, "time", mock.MagicMock()):
+            res = tf.fetch_detail_via_bridge("jiangsu_zhaobiao", "https://jiangsu.zhaobiao.cn/bidding_v_x.html")
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["error"], "detail_login_need_human_captcha")
+        self.assertIsNone(res["tenderFile"])
+        self.assertIn("绿化租摆", res["summary"])
+
+    def test_jiangsu_login_ok_then_member_download(self):
+        from crawl import tenderfile as tf
+
+        import fitz
+
+        with tempfile.TemporaryDirectory() as td:
+            pdf = Path(td) / "t.pdf"
+            doc = fitz.open()
+            pg = doc.new_page()
+            pg.insert_text((72, 72), "Jiangsu member TenderDoc 2026")
+            doc.save(str(pdf))
+            doc.close()
+            pdf_bytes = pdf.read_bytes()
+
+        gated = {"text": "绿化租摆项目 招标编号：【正式会员“登录”后可浏览】" * 4,
+                 "links": [], "cookie": "", "session": "s1"}
+        member = {"text": "绿化租摆项目 招标编号：ZB2026-001 招标文件下载 第一章 招标公告 预算 50 万元" * 4,
+                  "links": [{"t": "招标文件下载", "h": "https://jiangsu.zhaobiao.cn/down_abc.pdf"}],
+                  "cookie": "", "session": "s2"}
+
+        calls = {"n": 0}
+
+        def fake_page(sid, url):
+            calls["n"] += 1
+            return dict(gated) if calls["n"] == 1 else dict(member)
+
+        class FakeFailHttp:  # HTTP 优先路径失败 → 验证浏览器内下载兜底路径
+            def request(self, url, headers=None, **kw):
+                raise RuntimeError("offline in test")
+
+        with mock.patch.object(tf, "_bridge_page", side_effect=fake_page), \
+             mock.patch("db.load_env", return_value={"JIANGSU_ZHAOBIAO_USER": "u1", "JIANGSU_ZHAOBIAO_PASS": "p1"}), \
+             mock.patch.object(tf, "_jiangsu_bridge_login_ocr", return_value="ok"), \
+             mock.patch.object(tf, "HttpSession", return_value=FakeFailHttp()), \
+             mock.patch.object(tf, "_bridge_download_b64", return_value=(pdf_bytes, "")), \
+             mock.patch.object(tf, "time", mock.MagicMock()):
+            res = tf.fetch_detail_via_bridge("jiangsu_zhaobiao", "https://jiangsu.zhaobiao.cn/bidding_v_x.html")
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["tenderFile"]["format"], "pdf")
+        self.assertIn("Jiangsu member TenderDoc", res["tenderFile"]["text"])
+        Path(ROOT / res["tenderFile"]["path"]).unlink(missing_ok=True)
+
+    def test_ensure_jiangsu_login_captcha_registers_todo(self):
+        from crawl import tenderfile as tf
+
+        with mock.patch.object(tf, "_jiangsu_login_http", return_value="login_failed"), \
+             mock.patch.object(tf, "_jiangsu_bridge_login_ocr", return_value="captcha_wrong_loop"), \
+             mock.patch("db.load_env", return_value={"JIANGSU_ZHAOBIAO_USER": "u1", "JIANGSU_ZHAOBIAO_PASS": "p1"}), \
+             mock.patch("crawl.webbridge_client.ensure_bridge", return_value={"bridge": True, "extensions": 1}), \
+             mock.patch("crawl.webbridge_client.navigate", return_value={"ok": True}), \
+             mock.patch("crawl.webbridge_client.evaluate", return_value={"ok": True, "data": {"value": json.dumps(
+                 {"captcha_box": True, "captcha_rendered": True, "has_quit": False, "still_login": True})}}), \
+             mock.patch("crawl.captcha_queue.open_todo") as todo, \
+             mock.patch.object(tf, "time", mock.MagicMock()):
+            state = tf.ensure_jiangsu_login()
+        self.assertEqual(state, "need_human_captcha")
+        self.assertTrue(todo.called)  # 登记人工待办，绝不自动绕过滑块
+
+    def test_fetch_via_bridge_attachment_download(self):
+        from crawl import tenderfile as tf
+
+        import fitz
+
+        with tempfile.TemporaryDirectory() as td:
+            pdf = Path(td) / "t.pdf"
+            doc = fitz.open()
+            pg = doc.new_page()
+            pg.insert_text((72, 72), "Bridge TenderDoc body 2026")
+            doc.save(str(pdf))
+            doc.close()
+            pdf_bytes = pdf.read_bytes()
+
+        page = {"text": "某项目招标公告 正文……" * 30,
+                "links": [{"t": "招标文件", "h": "https://file.example.com/tender.pdf"}], "cookie": "sid=1",
+                "session": "s1"}
+
+        class FakeHttp:
+            def request(self, url, headers=None, **kw):
+                self.last_headers = headers
+                return 200, pdf_bytes, url
+
+        fake_http = FakeHttp()
+        with mock.patch("crawl.webbridge_client.ensure_bridge", return_value={"bridge": True, "extensions": 1}), \
+             mock.patch("crawl.webbridge_client.navigate", return_value={"ok": True}), \
+             mock.patch("crawl.webbridge_client.evaluate", return_value={"ok": True, "data": {"value": json.dumps(page, ensure_ascii=False)}}), \
+             mock.patch("crawl.webbridge_client.export_document_cookie", return_value={"ok": True, "cookie": "sid=1"}), \
+             mock.patch.object(tf, "_bridge_download_b64", return_value=(None, "in-browser disabled in test")), \
+             mock.patch.object(tf, "HttpSession", return_value=fake_http), \
+             mock.patch.object(tf, "time", mock.MagicMock()):
+            res = tf.fetch_detail_via_bridge("chinabidding", "https://www.chinabidding.cn/zbgg/x.html")
+        self.assertTrue(res["ok"], res)
+        self.assertEqual(res["tenderFile"]["format"], "pdf")
+        self.assertIn("Bridge TenderDoc", res["tenderFile"]["text"])
+        self.assertIn("sid=1", fake_http.last_headers.get("Cookie", ""))
+        Path(ROOT / res["tenderFile"]["path"]).unlink(missing_ok=True)
+
+
+class TestCaptchaOcr(unittest.TestCase):
+    """数字验证码识别：确定性算法自测（渲染数字回读）+ AI API 路径 + HTTP 登录流。"""
+
+    def _render_digits(self, digits: str) -> bytes:
+        import io
+
+        from PIL import Image, ImageDraw, ImageFont
+
+        font = ImageFont.truetype("arial.ttf", 32)
+        img = Image.new("RGB", (150, 50), "white")
+        d = ImageDraw.Draw(img)
+        d.text((10, 6), digits, fill="black", font=font)
+        buf = io.BytesIO()
+        img.save(buf, format="JPEG")
+        return buf.getvalue()
+
+    def test_ocr_deterministic_reads_rendered_digits(self):
+        from crawl import captcha_ocr
+
+        for digits in ("4829", "0315", "7760"):
+            got = captcha_ocr.ocr_deterministic(self._render_digits(digits))
+            self.assertEqual(got, digits, f"识别 {digits} → {got}")
+
+    def test_ocr_via_api_parses_content(self):
+        from crawl import captcha_ocr
+
+        cfg = {"enabled": True, "endpoint": "https://api.example.com/v1/chat/completions",
+               "api_key": "sk-test", "model": "vision"}
+        resp = {"choices": [{"message": {"content": "验证码数字是 4829。"}}]}
+
+        class FakeResp:
+            def read(self):
+                return json.dumps(resp).encode()
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *a):
+                return False
+
+        with mock.patch("urllib.request.urlopen", return_value=FakeResp()):
+            self.assertEqual(captcha_ocr.ocr_via_api(b"fake-image", cfg), "4829")
+
+    def test_ocr_via_api_disabled_returns_none(self):
+        from crawl import captcha_ocr
+
+        self.assertIsNone(captcha_ocr.ocr_via_api(b"x", {"enabled": False}))
+        self.assertIsNone(captcha_ocr.ocr_via_api(b"x", {"enabled": True, "api_key": ""}))
+
+    def _fake_http_login(self, post_bodies):
+        """登录流 FakeHttp：页→验证码→POST；POST 按 post_bodies 依次返回。"""
+        page_html = (
+            '<html><form><input type="hidden" name="loginType" value="0">'
+            '<input type="hidden" name="x1" value="v1">'
+            '<input name="loginUserId"><input name="loginPassword">'
+            '<input class="yzm" name="yzm" id="yzm"><img id="randimg" src="/common/img.jsp?n=l&1">'
+            "</form></html>"
+        )
+
+        class C:
+            def __init__(self, name, value):
+                self.name, self.value = name, value
+
+        class FakeHttp:
+            def __init__(self):
+                self.cj = [C("JSESSIONID", "abc123")]
+                self.calls = []
+
+            def request(self, url, **kw):
+                self.calls.append(url)
+                if "login.html" in url:
+                    return 200, page_html.encode("gbk"), url
+                if "img.jsp" in url:
+                    return 200, b"jpeg-bytes-fake" * 80, url
+                if "homePageUc.do" in url:
+                    return 200, "会员中心 账户管理".encode("gbk"), url
+                if "loginPost" in url:
+                    body = kw.get("data") or b""
+                    post_bodies.append(body.decode())
+                    return 200, b"ok", url
+                return 200, b"", url
+
+        return FakeHttp()
+
+    def test_jiangsu_login_http_flow(self):
+        from crawl import tenderfile as tf
+
+        bodies = []
+        fake_http = self._fake_http_login(bodies)
+        with mock.patch("db.load_env", return_value={"JIANGSU_ZHAOBIAO_USER": "u1", "JIANGSU_ZHAOBIAO_PASS": "p1"}), \
+             mock.patch.object(tf, "HttpSession", return_value=fake_http), \
+             mock.patch("crawl.captcha_ocr.ocr_captcha", return_value="4829"), \
+             mock.patch("crawl.cookie_store.save_cookie_header") as save, \
+             mock.patch.object(tf.time, "sleep", mock.MagicMock()):
+            state = tf._jiangsu_login_http()
+        self.assertEqual(state, "ok")
+        self.assertEqual(len(bodies), 1)
+        self.assertIn("loginUserId=u1", bodies[0])
+        self.assertIn("yzm=4829", bodies[0])
+        self.assertIn("loginType=userId", bodies[0])  # 账号流 loginType 必须 userId（非 mobile/0）
+        self.assertTrue(save.called)  # 登录 Cookie 落盘（HTTP 详情/附件复用）
+
+    def test_jiangsu_login_http_captcha_retry(self):
+        from crawl import tenderfile as tf
+
+        bodies = []
+        fake_http = self._fake_http_login(bodies)
+        ocr_calls = []
+
+        def fake_ocr(img):
+            ocr_calls.append(1)
+            return "1111" if len(ocr_calls) == 1 else "4829"
+
+        def fake_post(url, **kw):
+            if "loginPost" in url:
+                body = kw.get("data") or b""
+                bodies.append(body.decode())
+                if b"yzm=1111" in body:
+                    return 200, "验证码错误，请重新输入".encode("gbk"), url
+                return 200, b"ok", url
+            if "homePageUc.do" in url:
+                return 200, "会员中心 账户管理".encode("gbk"), url
+            if "login.html" in url:
+                return 200, ("<html><form><input type='hidden' name='loginType' value='0'>"
+                             "<input name='loginUserId'><input name='loginPassword'>"
+                             "<input class='yzm' name='yzm'><img id='randimg' src='/common/img.jsp?n=l&1'>"
+                             "</form></html>").encode("gbk"), url
+            return 200, b"jpeg-bytes" * 60, url
+
+        fake_http.request = fake_post
+        with mock.patch("db.load_env", return_value={"JIANGSU_ZHAOBIAO_USER": "u1", "JIANGSU_ZHAOBIAO_PASS": "p1"}), \
+             mock.patch.object(tf, "HttpSession", return_value=fake_http), \
+             mock.patch("crawl.captcha_ocr.ocr_captcha", side_effect=fake_ocr), \
+             mock.patch("crawl.cookie_store.save_cookie_header"), \
+             mock.patch.object(tf.time, "sleep", mock.MagicMock()):
+            state = tf._jiangsu_login_http()
+        self.assertEqual(state, "ok")
+        self.assertEqual(len(bodies), 2)  # 验证码错误后换图重试成功
+
+    def test_jiangsu_login_http_captcha_case_variant_retry(self):
+        """AI 读到混合大小写（eTly）→ 同图大小写变体重试成功（服务端认小写）。"""
+        from crawl import tenderfile as tf
+
+        bodies = []
+
+        class C:
+            def __init__(self, name, value):
+                self.name, self.value = name, value
+
+        class FakeHttp:
+            def __init__(self):
+                self.cj = [C("JSESSIONID", "abc")]
+
+            def request(self, url, **kw):
+                if "loginPost" in url:
+                    body = (kw.get("data") or b"").decode()
+                    bodies.append(body)
+                    if "yzm=eTly" in body:
+                        return 200, "验证码错误，请重新输入".encode("gbk"), url
+                    if "yzm=etly" in body:
+                        return 200, b"ok", url
+                    return 200, "验证码错误".encode("gbk"), url
+                if "homePageUc.do" in url:
+                    return 200, "会员中心 账户管理".encode("gbk"), url
+                if "login.html" in url:
+                    return 200, ("<html><form><input type='hidden' name='loginType' value='0'>"
+                                 "<input name='loginUserId'><input name='loginPassword'>"
+                                 "<input class='yzm' name='yzm'><img id='randimg' src='/common/img.jsp?n=l&1'>"
+                                 "</form></html>").encode("gbk"), url
+                return 200, b"jpeg-bytes" * 60, url
+
+        fake_http = FakeHttp()
+        with mock.patch("db.load_env", return_value={"JIANGSU_ZHAOBIAO_USER": "u1", "JIANGSU_ZHAOBIAO_PASS": "p1"}), \
+             mock.patch.object(tf, "HttpSession", return_value=fake_http), \
+             mock.patch("crawl.captcha_ocr.ocr_captcha", return_value="eTly"), \
+             mock.patch("crawl.cookie_store.save_cookie_header"), \
+             mock.patch.object(tf.time, "sleep", mock.MagicMock()):
+            state = tf._jiangsu_login_http()
+        self.assertEqual(state, "ok")
+        self.assertEqual(len(bodies), 2)  # 同图两 POST：原读 eTly → 小写变体 etly 成功
+        self.assertIn("yzm=etly", bodies[1])
+
+    def test_ensure_login_prefers_http_then_bridge(self):
+        from crawl import tenderfile as tf
+
+        # OCR 已配置（AI 多模态可用）→ HTTP 验证码登录优先
+        with mock.patch("crawl.captcha_ocr.load_ocr_cfg", return_value={"enabled": True}), \
+             mock.patch.object(tf, "_jiangsu_login_http", return_value="ok"):
+            self.assertEqual(tf.ensure_jiangsu_login(), "ok")
+        # OCR 未配置 → 跳过 HTTP；桥内 OCR 登录失败 → 滑块人工兜底
+        with mock.patch("crawl.captcha_ocr.load_ocr_cfg", return_value={"enabled": False}), \
+             mock.patch.object(tf, "_jiangsu_login_http", return_value="ok") as http_login, \
+             mock.patch.object(tf, "_jiangsu_bridge_login_ocr", return_value="captcha_wrong_loop") as bridge_ocr, \
+             mock.patch("db.load_env", return_value={"JIANGSU_ZHAOBIAO_USER": "u1", "JIANGSU_ZHAOBIAO_PASS": "p1"}), \
+             mock.patch("crawl.webbridge_client.ensure_bridge", return_value={"bridge": True, "extensions": 1}), \
+             mock.patch("crawl.webbridge_client.navigate", return_value={"ok": True}), \
+             mock.patch("crawl.webbridge_client.evaluate", return_value={"ok": True, "data": {"value": json.dumps(
+                 {"captcha_box": True, "has_quit": False, "still_login": True})}}), \
+             mock.patch("crawl.captcha_queue.open_todo"), \
+             mock.patch.object(tf, "time", mock.MagicMock()):
+            self.assertEqual(tf.ensure_jiangsu_login(), "need_human_captcha")
+            http_login.assert_not_called()  # 未启用 AI OCR 时不空耗 HTTP 验证码尝试
+            bridge_ocr.assert_called_once()
+
+    def test_jiangsu_bridge_login_ocr_flow(self):
+        """桥内 AI OCR 登录：取图→OCR→提交→登录态验证，全自动无人工。"""
+        from crawl import tenderfile as tf
+
+        import base64
+
+        b64 = base64.b64encode(b"fake-captcha-image").decode()
+        seq = [
+            # 1) 初始登录态检查：未登录
+            {"ok": True, "data": {"value": json.dumps({"has_quit": False, "has_phone_mask": False})}},
+            # 2) 取验证码
+            {"ok": True, "data": {"value": json.dumps({"ok": True, "b64": b64})}},
+            # 3) 提交
+            {"ok": True, "data": {"value": json.dumps({"ok": True})}},
+            # 4) 提交后状态：已登录
+            {"ok": True, "data": {"value": json.dumps({"has_quit": True, "has_phone_mask": True})}},
+        ]
+        with mock.patch("crawl.webbridge_client.ensure_bridge", return_value={"bridge": True, "extensions": 1}), \
+             mock.patch("crawl.webbridge_client.navigate", return_value={"ok": True}), \
+             mock.patch("crawl.webbridge_client.evaluate", side_effect=seq), \
+             mock.patch("crawl.captcha_ocr.ocr_captcha", return_value="4829") as ocr, \
+             mock.patch.object(tf, "time", mock.MagicMock()):
+            state = tf._jiangsu_bridge_login_ocr("u1", "p1")
+        self.assertEqual(state, "ok")
+        ocr.assert_called_once_with(b"fake-captcha-image")
 
 
 if __name__ == "__main__":

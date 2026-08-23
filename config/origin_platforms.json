@@ -1,0 +1,33 @@
+{
+  "note": "主体关键词 → 原发平台映射（P5 原发寻址用）。新增条目前先实测验证平台域名与主体归属，不拍脑袋。keywords 越长越优先。",
+  "platforms": [
+    {
+      "keywords": ["招商局集团电子招标采购交易平台", "招商局集团电子招标采购平台", "招商局", "招商商管"],
+      "domain": "dzzb.ciesco.com.cn",
+      "name": "招商局集团电子招标采购交易平台",
+      "confidence": "high",
+      "verified": "2026-08-23 web_search"
+    },
+    {
+      "keywords": ["华润集团守正电子招标采购平台", "华润守正", "华润"],
+      "domain": "szecp.crc.com.cn",
+      "name": "华润集团守正电子招标采购平台",
+      "confidence": "high",
+      "verified": "2026-08-23 web_search"
+    },
+    {
+      "keywords": ["中国政府采购网"],
+      "domain": "www.ccgp.gov.cn",
+      "name": "中国政府采购网",
+      "confidence": "high",
+      "verified": "自身即原发"
+    },
+    {
+      "keywords": ["江苏省公共资源交易网", "江苏省公共资源交易中心"],
+      "domain": "jsggzy.jszwfw.gov.cn",
+      "name": "江苏省公共资源交易网",
+      "confidence": "high",
+      "verified": "自身即原发"
+    }
+  ]
+}

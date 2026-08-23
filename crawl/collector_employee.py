@@ -71,6 +71,11 @@ METRIC_NAMES = (
 )
 
 REPORT_PATH = ROOT / "reports" / "collector-report.json"
+# P5：报告历史归档（每次运行留档，主报告覆写不丢史）+ 出勤简报（JSONL，一行一轮）
+REPORT_HISTORY_DIR = ROOT / "reports" / "history"
+BRIEFING_PATH = ROOT / "reports" / "briefing.jsonl"
+# 任务书到期提醒阈值：dateRange.end 距今 ≤ 14 天即提示
+WINDOW_WARN_DAYS = 14
 
 _BLOCK_MARKERS = ("http 403", "rate_limited", "频繁", "频控", "封禁", "blocked")
 
@@ -345,6 +350,42 @@ def count_blocked_events(errors: list) -> int:
     return total
 
 
+def _window_note(filters: dict, today=None) -> str | None:
+    """任务书（dateRange.end）到期提醒：剩 ≤WINDOW_WARN_DAYS 天提示刷新；已过期显式标出。"""
+    dr = (filters or {}).get("date") or {}
+    end = str(dr.get("end") or "").strip()
+    if not end:
+        return None
+    today = today or datetime.now().date()
+    try:
+        d = datetime.strptime(end[:10], "%Y-%m-%d").date()
+    except ValueError:
+        return None
+    days = (d - today).days
+    if days < 0:
+        return f"任务窗口已于 {end} 过期（已过 {-days} 天），请刷新任务书"
+    if days <= WINDOW_WARN_DAYS:
+        return f"任务窗口将于 {end} 到期（剩 {days} 天），建议刷新任务书"
+    return None
+
+
+def _open_todo_count() -> int | None:
+    """当前待人工验证码待办数；DB 不可达返回 None（简报不因观测失败而崩）。"""
+    try:
+        conn = connect()
+    except Exception:
+        return None
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) AS c FROM captcha_todos WHERE status='open'")
+            row = cur.fetchone()
+            return int(row["c"]) if row else 0
+    except Exception:
+        return None
+    finally:
+        conn.close()
+
+
 # ---------------------------------------------------------------- 内核调用 ---
 
 def _existing_hashes(pid: str) -> set[str]:
@@ -371,39 +412,53 @@ def _max_tenderfile_per_platform() -> int:
     return 5
 
 
+def _max_tenderfile_total() -> int:
+    """全平台每轮详情尝试总数上限（防六站全开时单轮过久）。SPIDER_MAX_TENDERFILE_TOTAL 覆盖。"""
+    v = os.environ.get("SPIDER_MAX_TENDERFILE_TOTAL")
+    if v:
+        try:
+            return max(0, int(v))
+        except ValueError:
+            pass
+    return 20
+
+
 def _enrich_tenderfiles(output: list[dict], run_list: list[str]) -> dict:
-    """v1.2.0 详情抓取：对 output 条目按平台尝试下载招标文件附件并回填 summary/tenderFile。
+    """v1.2.0 详情抓取：对 output 条目按平台路由尝试抓取详情/附件并回填 summary/tenderFile。
 
     口径：
-    - 只对 HTTP 详情源站（crawl.tenderfile.HTTP_DETAIL_SOURCES）尝试；浏览器路由源站如实跳过不尝试；
-    - 每平台尝试数受 _max_tenderfile_per_platform() 封顶；
-    - 成功 = tenderFile 下载成功且 text 非空；失败如实记录 error，tenderFile=null；
+    - 按 crawl.tenderfile.DETAIL_MODES 路由：http（ccgp）/ ggzy_http（ggzy·jsggzy）/ bridge
+      （chinabidding·jiangsu_zhaobiao）/ bridge_vaptcha（cebpub：vaptcha 未过如实报并登记待办）；
+    - 每平台尝试数受 _max_tenderfile_per_platform() 封顶，总数受 _max_tenderfile_total() 封顶；
+    - 成功 = tenderFile 下载成功且 text 非空；失败如实记录 error，tenderFile=null，summary 仍尽力填充；
     - detail_fetch_success_rate = 成功/尝试（本轮无尝试 → null）。
     返回 {"success_rate", "errors", "summary": {...}}。
     """
     limit = _max_tenderfile_per_platform()
-    if limit <= 0:
-        return {"success_rate": None, "errors": [], "summary": {"mode": "disabled", "note": "SPIDER_MAX_TENDERFILE=0"}}
+    total_limit = _max_tenderfile_total()
+    if limit <= 0 or total_limit <= 0:
+        return {"success_rate": None, "errors": [],
+                "summary": {"mode": "disabled", "note": "SPIDER_MAX_TENDERFILE/TOTAL=0"}}
 
     per_platform: dict[str, dict] = {}
     attempts = successes = 0
     errors: list[str] = []
-    skipped_not_wired: list[str] = []
+    skipped: list[dict] = []
 
     for item in output:
         pid = item["platform"]
         url = item["url"]
-        if pid in BROWSER_ROUTES:
-            if pid not in skipped_not_wired:
-                skipped_not_wired.append(pid)
+        mode = tenderfile_mod.DETAIL_MODES.get(pid)
+        if mode is None:
+            if not any(s["platform"] == pid for s in skipped):
+                skipped.append({"platform": pid, "reason": "unknown_detail_mode"})
             continue
-        if pid not in tenderfile_mod.HTTP_DETAIL_SOURCES:
-            continue
-        st = per_platform.setdefault(pid, {"attempts": 0, "success": 0, "downloaded": 0, "no_url": 0, "errors": []})
+        st = per_platform.setdefault(pid, {"mode": mode, "attempts": 0, "success": 0, "downloaded": 0,
+                                           "no_url": 0, "summaryFilled": 0, "errors": []})
         if not url:
             st["no_url"] += 1
             continue
-        if st["attempts"] >= limit:
+        if st["attempts"] >= limit or attempts >= total_limit:
             continue
         st["attempts"] += 1
         attempts += 1
@@ -418,19 +473,23 @@ def _enrich_tenderfiles(output: list[dict], run_list: list[str]) -> dict:
             err = res.get("error") or "unknown_detail_error"
             st["errors"].append(err)
             errors.append(err)
+        if res.get("summary"):
+            st["summaryFilled"] += 1
         item["summary"] = res.get("summary") or item["summary"]
         item["tenderFile"] = tf
 
     rate = round(successes / attempts, 3) if attempts else None
     summary = {
-        "mode": "http",
+        "mode": "per-platform",
         "attempts": attempts,
         "success": successes,
         "downloaded": sum(s["downloaded"] for s in per_platform.values()),
+        "summaryFilled": sum(s["summaryFilled"] for s in per_platform.values()),
         "limitPerPlatform": limit,
+        "limitTotal": total_limit,
         "perPlatform": per_platform,
-        "skippedNotWired": skipped_not_wired,
-        "note": "浏览器路由源站（cebpub/jiangsu_zhaobiao）详情需真浏览器会话、未接入，不尝试；成功率=成功/尝试，无尝试为 null。",
+        "skipped": skipped,
+        "note": "cebpub=桥内尝试（vaptcha 未过如实 detail_vaptcha_gated 并登记待办，人工一次后自动生效）；bridge 站附件带登录门时如实 null、摘要尽力填充；成功率=附件下载成功/尝试，无尝试为 null。",
     }
     return {"success_rate": rate, "errors": errors, "summary": summary}
 
@@ -551,11 +610,46 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
             "platform_success_rate 口径：1.0=success/partial，0.0=failed/error；失败且 0 结果同时进入 empty_platforms。",
             "publishTime 无日期输出 null（契约 v1.1.0 nullable；不造假）。",
             "tenderFile 口径：详情页附件下载+正文清洗成功才有值；任何一步失败如实 null，error 记录原因。成功=附件下载成功且 text 非空可读。",
-            "detail_fetch_success_rate 口径：成功/尝试；本轮无尝试时为 null（不编 0）。浏览器路由源站（cebpub/jiangsu_zhaobiao）详情需真浏览器会话、未接入，不尝试、不计入。",
+            "detail_fetch_success_rate 口径：成功/尝试；本轮无尝试时为 null（不编 0）。详情按平台路由：ccgp=HTTP、ggzy/jsggzy=ggzy b 页 HTTP、chinabidding/jiangsu=WebBridge（附件带登录门时如实 null、摘要尽力填充）、cebpub=桥内尝试（vaptcha 未过如实报并登记待办）。",
         ],
     }
 
-    REPORT_PATH.parent.mkdir(parents=True, exist_ok=True)
-    REPORT_PATH.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+    window_note = _window_note(filters)
+    if window_note:
+        report["notes"].append(f"任务书到期提醒：{window_note}")
+    briefing = {
+        "runId": report["runId"],
+        "startedAt": report["startedAt"],
+        "platforms": run_list,
+        "fetched": fetched_total,
+        "dedup_new": dedup_new_total,
+        "platform_success_rate": success_rate,
+        "failed_platforms": [p["platform"] for p in per_platform if p["status"] in ("failed", "error")],
+        "empty_platforms": empty_platforms,
+        "blocked_count": metrics["blocked_count"],
+        "detail_fetch_success_rate": detail_stats["success_rate"],
+        "open_todos": _open_todo_count(),
+        "window_note": window_note,
+    }
+    report["briefing"] = briefing
 
-    return {"output": output, "report": report, "reportPath": str(REPORT_PATH)}
+    report_path = Path(os.environ.get("SPIDER_REPORT_PATH") or REPORT_PATH)
+    report_path.parent.mkdir(parents=True, exist_ok=True)
+    report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+
+    # P5：历史归档 + 简报（单文件覆写不再是唯一留档；runId 同秒碰撞追加序号）
+    try:
+        REPORT_HISTORY_DIR.mkdir(parents=True, exist_ok=True)
+        hist = REPORT_HISTORY_DIR / f"{report['runId']}.json"
+        i = 1
+        while hist.exists():
+            i += 1
+            hist = REPORT_HISTORY_DIR / f"{report['runId']}-{i}.json"
+        hist.write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        BRIEFING_PATH.parent.mkdir(parents=True, exist_ok=True)
+        with BRIEFING_PATH.open("a", encoding="utf-8") as f:
+            f.write(json.dumps(briefing, ensure_ascii=False) + "\n")
+    except OSError:
+        pass  # 归档失败不影响本轮主报告与产出
+
+    return {"output": output, "report": report, "reportPath": str(report_path)}
