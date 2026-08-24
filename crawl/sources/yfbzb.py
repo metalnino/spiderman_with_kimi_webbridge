@@ -64,8 +64,9 @@ class YfbzbSource(BaseSource):
         return notices
 
     def fetch(self, keywords: list[str], *, max_pages: int = 1) -> Iterable[Notice]:
+        cap = self._pages_cap(max_pages, 3)
         for kw in keywords:
-            for page in range(1, max_pages + 1):
+            for page in range(1, cap + 1):
                 url = f"{SEARCH_URL}?keyword={quote(kw)}&pageNo={page}"
                 try:
                     html = self.http.get_text(
@@ -76,7 +77,10 @@ class YfbzbSource(BaseSource):
                 except Exception as e:  # noqa: BLE001
                     raise SourceError(f"yfbzb list failed: {str(e)[:200]}") from e
                 items = self._parse_rows(html, kw)
+                self._count_page()
                 if not items:
                     break
                 yield from items
                 self.http.sleep()
+                if self._page_all_seen(items):
+                    break

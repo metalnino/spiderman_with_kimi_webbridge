@@ -576,7 +576,8 @@ class TestResilience(unittest.TestCase):
 
         src = ChinabiddingSource()
         src.http = FakeHttp()
-        items = list(src.fetch(["kw1", "kw2"], max_pages=1))
+        with mock.patch.dict("os.environ", {"SPIDER_CHINABIDDING_MAX_PAGES": "1"}):  # P7：默认 3 页，旧用例锁 1 页
+            items = list(src.fetch(["kw1", "kw2"], max_pages=1))
         self.assertEqual(len(items), 1)  # kw2 超时不拖垮 kw1 的结果
 
         class Boom:

@@ -46,13 +46,13 @@ def _fmt_day(d: datetime) -> str:
     return d.strftime("%Y:%m:%d")
 
 
-def main() -> int:
+def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="ccgp 逐日回溯扫描")
     ap.add_argument("--start", default="2026-07-01")
     ap.add_argument("--end", default="2026-08-31")
     ap.add_argument("--max-pages", type=int, default=30)
     ap.add_argument("--kw", default="绿植租摆")
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     start = datetime.strptime(args.start, "%Y-%m-%d")
     end = datetime.strptime(args.end, "%Y-%m-%d")

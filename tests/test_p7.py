@@ -1,6 +1,7 @@
 """P7 召回自证：水位游标 + ccgp 翻页/已见边界 单测（不碰外网/DB）。"""
 from __future__ import annotations
 
+import json
 import sys
 import tempfile
 import unittest
@@ -111,6 +112,111 @@ class TestCcgpAgencyParse(unittest.TestCase):
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].buyer, "某医院")
         self.assertEqual(items[0].agency, "某招标代理有限公司")
+
+
+class TestGgzyWatermarkBoundary(unittest.TestCase):
+    def _rec(self, rid, title):
+        return {"id": rid, "title": title, "publishTime": "2026-08-01 10:00:00",
+                "url": "/information/html/a/1/2/3/x.html", "province": "320000",
+                "provinceText": "江苏省", "cityText": "南京"}
+
+    def test_stops_at_seen_page_and_reports_pages(self):
+        from crawl import watermark
+        from crawl.sources.ggzy import GgzySource
+
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(watermark, "WATERMARK_DIR", Path(td)):
+                watermark.merge("ggzy", ["1", "2"])
+                src = GgzySource()
+                pages = {
+                    1: {"code": 200, "data": {"records": [self._rec("1", "旧公告一"), self._rec("2", "旧公告二")]}},
+                    2: {"code": 200, "data": {"records": [self._rec("3", "更旧公告三")]}},
+                }
+
+                def fake_json(url, data=None, headers=None):
+                    page = int(str(data).split("PAGENUMBER=")[1].split("&")[0])
+                    return pages.get(page, {"code": 200, "data": {"records": []}})
+
+                with mock.patch.object(src.http, "get_json", side_effect=fake_json), \
+                     mock.patch.object(src.http, "sleep", return_value=None):
+                    notices = list(src.fetch(["绿植租摆"], max_pages=1))
+                # 第 1 页整页已见 → 停（第 2 页不扫）
+                self.assertEqual(src.last_scanned_pages, 1)
+                self.assertEqual(len(notices), 2)
+
+    def test_no_watermark_scans_cap(self):
+        from crawl import watermark
+        from crawl.sources.ggzy import GgzySource
+
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(watermark, "WATERMARK_DIR", Path(td)), \
+                 mock.patch.dict("os.environ", {"SPIDER_GGZY_MAX_PAGES": "2"}):
+                src = GgzySource()
+
+                def fake_json(url, data=None, headers=None):
+                    page = int(str(data).split("PAGENUMBER=")[1].split("&")[0])
+                    return {"code": 200, "data": {"records": [self._rec(f"p{page}", f"第{page}页公告")]}}
+
+                with mock.patch.object(src.http, "get_json", side_effect=fake_json), \
+                     mock.patch.object(src.http, "sleep", return_value=None):
+                    list(src.fetch(["绿植租摆"], max_pages=1))
+                self.assertEqual(src.last_scanned_pages, 2)
+
+
+class TestCcgpBackfillJob(unittest.TestCase):
+    """回溯作业离线验证：逐日推进 + 断点续扫 + 状态落盘（不碰网络/DB）。"""
+
+    def _load_job(self):
+        import importlib.util
+
+        spec = importlib.util.spec_from_file_location(
+            "backfill_ccgp_window", ROOT / "scripts" / "jobs" / "backfill_ccgp_window.py"
+        )
+        mod = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(mod)
+        return mod
+
+    class FakeSource:
+        last_scanned_pages = 0
+
+        def fetch(self, keywords, *, max_pages=1, start_time=None, end_time=None):
+            return []
+
+    def test_two_day_run_completes(self):
+        from crawl import watermark
+
+        job = self._load_job()
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(watermark, "WATERMARK_DIR", Path(td) / "wm"), \
+                 mock.patch.object(job, "STATE_PATH", Path(td) / "wm" / "ccgp_backfill_state.json"), \
+                 mock.patch.object(job, "CcgpSource", self.FakeSource), \
+                 mock.patch.object(job, "upsert_notices", return_value={"attempted": 0, "affected": 0}):
+                rc = job.main(["--start", "2026-07-01", "--end", "2026-07-02"])
+            self.assertEqual(rc, 0)
+            state = json.loads((Path(td) / "wm" / "ccgp_backfill_state.json").read_text(encoding="utf-8"))
+            self.assertTrue(state.get("done"))
+            self.assertEqual(state.get("next_day"), "2026-07-03")
+
+    def test_failure_day_preserves_resume_point(self):
+        from crawl import watermark
+
+        job = self._load_job()
+
+        class BoomSource:
+            last_scanned_pages = 0
+
+            def fetch(self, keywords, *, max_pages=1, start_time=None, end_time=None):
+                raise RuntimeError("ccgp rate_limited")
+
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(watermark, "WATERMARK_DIR", Path(td) / "wm"), \
+                 mock.patch.object(job, "STATE_PATH", Path(td) / "wm" / "ccgp_backfill_state.json"), \
+                 mock.patch.object(job, "CcgpSource", BoomSource):
+                rc = job.main(["--start", "2026-07-01", "--end", "2026-07-02"])
+            self.assertEqual(rc, 1)
+            state = json.loads((Path(td) / "wm" / "ccgp_backfill_state.json").read_text(encoding="utf-8"))
+            self.assertEqual(state.get("next_day"), "2026-07-01")  # 失败日不推进
+            self.assertIn("rate_limited", state.get("last_error") or "")
 
 
 class TestAutoBackfillPass(unittest.TestCase):

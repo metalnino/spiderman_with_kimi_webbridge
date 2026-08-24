@@ -26,8 +26,9 @@ class ChinabiddingSource(BaseSource):
 
         collected: list[Notice] = []
         errors: list[str] = []
+        cap = self._pages_cap(max_pages, 3)
         for kw in keywords:
-            for page in range(1, max_pages + 1):
+            for page in range(1, cap + 1):
                 q = urllib.parse.urlencode(
                     {
                         "keyword": kw,
@@ -48,13 +49,14 @@ class ChinabiddingSource(BaseSource):
                     errors.append(f"{kw} p{page}: {str(e)[:160]}")
                     self.http.sleep()
                     continue
+                page_notices: list[Notice] = []
                 for it in items:
                     if not isinstance(it, dict):
                         continue
                     path = it.get("url") or ""
                     detail = host + path if str(path).startswith("/") else (path or None)
                     title = it.get("title") or ""
-                    n = Notice(
+                    page_notices.append(Notice(
                         source_id=self.source_id,
                         source_name=self.source_name,
                         external_id=str(it.get("id") or ""),
@@ -67,11 +69,14 @@ class ChinabiddingSource(BaseSource):
                         detail_url=detail,
                         bid_status="未知",
                         raw={"area_id": it.get("area_id"), "table_name": it.get("table_name")},
-                    )
-                    collected.append(n)
-                    yield n
+                    ))
+                self._count_page()
+                collected.extend(page_notices)
+                yield from page_notices
                 self.http.sleep()
                 if not items:
+                    break
+                if self._page_all_seen(page_notices):
                     break
         if errors:
             detail = "; ".join(errors[:3])[:400]

@@ -18,9 +18,10 @@ class GgzySource(BaseSource):
         deal_time = str(cfg.get("deal_time") or "05")
         referer = cfg.get("referer") or "https://www.ggzy.gov.cn/deal/dealList.html"
         code_to_prov = {c["area_code"]: c["province"] for c in self.cities}
+        cap = self._pages_cap(max_pages, 3)
 
         for kw in keywords:
-            for page in range(1, max_pages + 1):
+            for page in range(1, cap + 1):
                 body = urllib.parse.urlencode(
                     {"FINDTXT": kw, "PAGENUMBER": str(page), "DEAL_TIME": deal_time}
                 ).encode()
@@ -38,13 +39,14 @@ class GgzySource(BaseSource):
                 if data.get("code") != 200:
                     raise RuntimeError(f"ggzy code={data.get('code')} {data.get('message')}")
                 recs = ((data.get("data") or {}).get("records")) or []
+                page_notices: list[Notice] = []
                 for rec in recs:
                     href = rec.get("url") or ""
                     detail = ("https://www.ggzy.gov.cn" + href) if href.startswith("/") else href
                     pcode = str(rec.get("province") or "")
                     prov = code_to_prov.get(pcode) or (rec.get("provinceText") or "").replace("省", "")
                     title = rec.get("title") or ""
-                    yield Notice(
+                    page_notices.append(Notice(
                         source_id=self.source_id,
                         source_name=self.source_name,
                         external_id=str(rec.get("id") or ""),
@@ -59,7 +61,11 @@ class GgzySource(BaseSource):
                         project_code=rec.get("tenderProjectCode"),
                         buyer=None,
                         raw={"id": rec.get("id"), "platform": rec.get("transactionSourcesPlatformText")},
-                    )
+                    ))
+                self._count_page()
+                yield from page_notices
                 self.http.sleep()
                 if not recs:
+                    break
+                if self._page_all_seen(page_notices):
                     break

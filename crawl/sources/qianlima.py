@@ -65,8 +65,9 @@ class QianlimaSource(BaseSource):
         return notices
 
     def fetch(self, keywords: list[str], *, max_pages: int = 1) -> Iterable[Notice]:
+        cap = self._pages_cap(max_pages, 3)
         for kw in keywords:
-            for page in range(1, max_pages + 1):
+            for page in range(1, cap + 1):
                 try:
                     _, raw, _ = self.http.request(
                         self._build_url(kw, page),
@@ -83,7 +84,10 @@ class QianlimaSource(BaseSource):
                 if not isinstance(data, dict) or str(data.get("code")) != "200":
                     raise SourceError(f"qianlima api code={data.get('code')} msg={data.get('msg')}")
                 items = self._parse(data, kw)
+                self._count_page()
                 if not items:
                     break
                 yield from items
                 self.http.sleep()
+                if self._page_all_seen(items):
+                    break

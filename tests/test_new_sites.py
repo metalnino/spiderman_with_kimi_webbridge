@@ -75,7 +75,8 @@ class TestYfbzb(unittest.TestCase):
 
         src = YfbzbSource()
         with mock.patch.object(src.http, "get_text", return_value=YFB_FIXTURE), \
-             mock.patch.object(src.http, "sleep", mock.MagicMock()):
+             mock.patch.object(src.http, "sleep", mock.MagicMock()), \
+             mock.patch.dict("os.environ", {"SPIDER_YFBZB_MAX_PAGES": "1"}):  # P7：默认 3 页，旧用例锁 1 页
             items = list(src.fetch(["绿植租摆"], max_pages=1))
         self.assertEqual(len(items), 2)
         self.assertEqual(items[0].keyword, "绿植租摆")
@@ -97,7 +98,8 @@ class TestQianlima(unittest.TestCase):
 
         src = QianlimaSource()
         with mock.patch.object(src.http, "request", return_value=(200, json.dumps(QLM_FIXTURE).encode(), "")), \
-             mock.patch.object(src.http, "sleep", mock.MagicMock()):
+             mock.patch.object(src.http, "sleep", mock.MagicMock()), \
+             mock.patch.dict("os.environ", {"SPIDER_QIANLIMA_MAX_PAGES": "1"}):  # P7：默认 3 页，旧用例锁 1 页
             items = list(src.fetch(["绿植租摆"], max_pages=1))
         self.assertEqual(len(items), 2)
 

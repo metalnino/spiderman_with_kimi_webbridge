@@ -48,8 +48,9 @@ class JsggzySource(BaseSource):
         api = cfg.get("api") or "https://www.ggzy.gov.cn/information/pubTradingInfo/getTradList"
         deal_time = str(cfg.get("deal_time") or "05")
         referer = cfg.get("referer") or "https://www.ggzy.gov.cn/deal/dealList.html"
+        cap = self._pages_cap(max_pages, 3)
         out: list[Notice] = []
-        for page in range(1, max_pages + 1):
+        for page in range(1, cap + 1):
             body = urllib.parse.urlencode(
                 {
                     "FINDTXT": kw,
@@ -70,11 +71,12 @@ class JsggzySource(BaseSource):
             if data.get("code") != 200:
                 break
             recs = ((data.get("data") or {}).get("records")) or []
+            page_notices: list[Notice] = []
             for rec in recs:
                 href = rec.get("url") or ""
                 detail = ("https://www.ggzy.gov.cn" + href) if str(href).startswith("/") else href
                 title = rec.get("title") or ""
-                out.append(
+                page_notices.append(
                     Notice(
                         source_id=self.source_id,
                         source_name=self.source_name,
@@ -90,8 +92,12 @@ class JsggzySource(BaseSource):
                         raw={"via": "ggzy_province_slice", "id": rec.get("id")},
                     )
                 )
+            self._count_page()
+            out.extend(page_notices)
             self.http.sleep()
             if not recs:
+                break
+            if self._page_all_seen(page_notices):
                 break
         return out
 
