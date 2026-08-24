@@ -53,7 +53,7 @@ IDENTITY = {
     "contractVersion": "1.2.0",
     "coreType": "rule",
     "autonomyBudget": "deterministic",
-    "responsibility": "从各招标平台抓取绿植租摆公告并去重，附详情抓取与招标文件下载",
+    "responsibility": "从各招标平台抓取绿植租摆/办公绿化/职场绿植绿化公告并去重，附详情抓取与招标文件下载",
     "output": "结构化公告条目数组（含招标文件本体 tenderFile，可空）",
 }
 

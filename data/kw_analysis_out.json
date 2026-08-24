@@ -1,0 +1,195 @@
+{
+  "config_groups": {
+    "core": [
+      "绿植租摆",
+      "绿植租赁",
+      "花卉租摆",
+      "室内绿化",
+      "室外绿化",
+      "绿化养护",
+      "园林养护"
+    ],
+    "scene": [
+      "足球场养护",
+      "球场养护",
+      "草坪养护",
+      "屋顶绿化",
+      "立体绿化",
+      "垂直绿化",
+      "植物墙",
+      "绿墙",
+      "道路绿化",
+      "园区绿化",
+      "物业绿化",
+      "景观养护",
+      "绿化管养",
+      "苗木采购",
+      "花卉采购",
+      "盆栽",
+      "绿雕",
+      "花境",
+      "补植",
+      "移栽"
+    ],
+    "commercial": [
+      "商业综合体绿化",
+      "商业体绿化",
+      "购物中心绿化",
+      "商场绿植",
+      "商场绿化",
+      "写字楼绿植",
+      "写字楼绿化",
+      "办公楼绿植",
+      "办公楼绿化",
+      "售楼处绿植",
+      "酒店绿植",
+      "酒店绿化",
+      "商业街绿化",
+      "大堂绿植",
+      "商业空间绿化",
+      "会所绿化",
+      "展厅绿植",
+      "门店绿植",
+      "商超绿化",
+      "室内植物租赁",
+      "办公绿化",
+      "职场绿植绿化"
+    ],
+    "weak_or_noisy": [
+      "绿植业务",
+      "绿植售卖",
+      "绿化工程",
+      "园林绿化"
+    ],
+    "active": [
+      "绿植租摆",
+      "办公绿化",
+      "职场绿植绿化"
+    ],
+    "scene_as_tag_only": [
+      "酒店绿植",
+      "酒店绿化",
+      "写字楼绿植",
+      "办公楼绿化",
+      "售楼处绿植",
+      "商业综合体绿化",
+      "商业空间绿化",
+      "会所绿化",
+      "大堂绿植",
+      "屋顶绿化",
+      "购物中心绿化",
+      "商场绿植"
+    ]
+  },
+  "db_keyword_state": [
+    {
+      "keyword": "办公绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "绿植租摆",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "职场绿植绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "园区绿化",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "园林养护",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "室内植物租赁",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "室内绿化",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "室外绿化",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "植物墙",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "物业绿化",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "立体绿化",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "绿化养护",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "绿化管养",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "花卉租摆",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "花卉采购",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "苗木采购",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "草坪养护",
+      "enabled": 0,
+      "group_name": "active"
+    },
+    {
+      "keyword": "足球场养护",
+      "enabled": 0,
+      "group_name": "active"
+    }
+  ],
+  "notice_counts": [
+    {
+      "keyword": "绿植租摆",
+      "c": 90,
+      "pass_cnt": "83"
+    },
+    {
+      "keyword": "绿植租赁",
+      "c": 2,
+      "pass_cnt": "2"
+    }
+  ],
+  "total_notices": 92,
+  "title_hits": {
+    "办公绿化": 0,
+    "职场绿植": 0,
+    "办公区绿化": 0,
+    "办公场所绿化": 0
+  }
+}

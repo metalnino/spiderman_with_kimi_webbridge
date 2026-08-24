@@ -1,6 +1,6 @@
 {
   "defaults": {
-    "trial_keywords": ["绿植租摆"],
+    "trial_keywords": ["绿植租摆", "办公绿化", "职场绿植绿化"],
     "delay_ms_min": 800,
     "delay_ms_max": 2200,
     "max_pages_per_keyword": 1,

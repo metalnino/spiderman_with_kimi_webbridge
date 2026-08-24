@@ -32,7 +32,7 @@
 
 ## 6. 项目关键口径（当前阶段）
 
-- 需求口径：关键词「绿植租摆」× 8 城（南京/上海/苏州/杭州/武汉/深圳/广州/合肥）× 发布时间 2026-07-01 ~ 2026-08-31；词库收窄必须 config.active 与 DB keyword_state 两层同步。
+- 需求口径：关键词「绿植租摆 + 办公绿化 + 职场绿植绿化」× 8 城（南京/上海/苏州/杭州/武汉/深圳/广州/合肥）× 发布时间 2026-07-01 ~ 2026-08-31；词库收窄必须 config.active 与 DB keyword_state 两层同步。
 - 架构：HTTP 主爬 + 真浏览器（WebBridge/Playwright）过反爬；NAS 已弃用（2026-08-20），本机为唯一运行点、六站全开：ccgp/chinabidding/ggzy/jsggzy=HTTP，cebpub=Playwright，jiangsu=WebBridge；共享同一 MySQL。
 - 员工口径：采集走「招标采集员」外壳（crawl/collector_employee.py，implements collector/v1.2.0）→ 契约 output（含 tenderFile，可空）+ reports/collector-report.json（7 项指标）。
 - WebBridge 开桥 = 已固化的代码能力，禁止重新逆向：桥服务端 scripts/webbridge_server.py（127.0.0.1:10086，Chrome/Edge 扩展自动连）；一键运维 scripts/wb_bridge.py status/start/stop；采集员跑 webbridge 源前自动 ensure_bridge()（起桥+开浏览器+等扩展，幂等）。协议文档 .cursor/docs/webbridge_bridge.md。
