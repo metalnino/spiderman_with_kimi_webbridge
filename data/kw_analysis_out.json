@@ -53,6 +53,9 @@
       "商超绿化",
       "室内植物租赁",
       "办公绿化",
+      "办公区绿化",
+      "办公室绿化",
+      "办公场所绿化",
       "职场绿植绿化"
     ],
     "weak_or_noisy": [
@@ -64,6 +67,9 @@
     "active": [
       "绿植租摆",
       "办公绿化",
+      "办公区绿化",
+      "办公室绿化",
+      "办公场所绿化",
       "职场绿植绿化"
     ],
     "scene_as_tag_only": [
@@ -82,6 +88,21 @@
     ]
   },
   "db_keyword_state": [
+    {
+      "keyword": "办公区绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "办公场所绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "办公室绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
     {
       "keyword": "办公绿化",
       "enabled": 1,

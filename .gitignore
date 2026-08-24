@@ -21,6 +21,8 @@ data/web/*.json
 data/web/crm.html
 data/web/dashboard.html
 data/web/warm_log.jsonl
+# P7 水位文件（本机运行时状态，每轮更新，不入库）
+data/watermark/
 # 临时探针脚本与样本（调试残留，勿入库）
 scripts/_tmp_*
 data/web/zhaobiao_*

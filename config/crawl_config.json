@@ -66,6 +66,9 @@
       "商超绿化",
       "室内植物租赁",
       "办公绿化",
+      "办公区绿化",
+      "办公室绿化",
+      "办公场所绿化",
       "职场绿植绿化"
     ],
     "weak_or_noisy": [
@@ -77,6 +80,9 @@
     "active": [
       "绿植租摆",
       "办公绿化",
+      "办公区绿化",
+      "办公室绿化",
+      "办公场所绿化",
       "职场绿植绿化"
     ],
     "scene_as_tag_only": [
@@ -145,7 +151,7 @@
     "area_granularity": "站点 area 仅为省级；城市靠标题/正文二次匹配",
     "city_filter_mode": "province_then_title",
     "city_scope": "只看目标城市（南京上海苏州杭州武汉深圳广州合肥）；only_target_cities=true 抓取即过滤，标题匹配不到目标城市则不入库",
-    "keyword_usage": "爬虫读取 keywords.active（绿植租摆+办公绿化+职场绿植绿化，2026-08-24 业务新增后两词）；commercial=商业体场景；weak_or_noisy 噪声大；绿化养护/室内绿化等 2026-08-20 收窄停用",
+    "keyword_usage": "爬虫读取 keywords.active：绿植租摆 + 办公绿化系（办公绿化/办公区绿化/办公室绿化/办公场所绿化，2026-08-24 实测 chinabidding 严格子串匹配，「办公绿化」仅 1 条而变体词各 10+ 条，故拆分补召回）+ 职场绿植绿化；commercial=商业体场景；weak_or_noisy 噪声大；绿化养护/室内绿化等 2026-08-20 收窄停用",
     "bid_status": "可投标 ≈ open_time > now；已开标 ≈ open_time <= now。最终以官网报名截止为准。",
     "relevance": "场景词不再单独检索；标题需正茎词且过负向过滤"
   }
