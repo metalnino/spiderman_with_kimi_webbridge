@@ -12,6 +12,7 @@ summary / tenderfile_path / detail_status（成功=ok，失败=err:<摘要>）�
 """
 from __future__ import annotations
 
+import os
 import re
 import sys
 from pathlib import Path
@@ -101,6 +102,70 @@ def _parse_amount(amount_text: str | None) -> float | None:
     if unit in ("万元", "万"):
         return num * 10000
     return num
+
+
+def find_notice_id_by_item(item: dict) -> int | None:
+    """契约条目 → notices.id（按 source_id+title+url 回查；找不到返回 None）。"""
+    title = item.get("title") or ""
+    url = item.get("url") or ""
+    if not title or not url:
+        return None
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id FROM notices WHERE source_id=%s AND title=%s "
+                "AND (detail_url=%s OR official_url=%s) LIMIT 1",
+                (item.get("platform"), title, url, url),
+            )
+            row = cur.fetchone()
+            return int(row["id"]) if row else None
+    finally:
+        conn.close()
+
+
+def auto_backfill_pass(output_items: list[dict], run_list: list[str],
+                       *, per_source_limit: int = 5) -> dict:
+    """P7 出勤后自动回填：对「可投标阶段、缺金额」的 HTTP 详情源站新条目补字段/摘要。
+
+    只碰 ccgp/ggzy/jsggzy（HTTP 直取、无人工门）；每条一次、每站每轮上限 5；
+    失败如实记（detail_status），不轰炸不阻塞出勤。SPIDER_NO_AUTO_BACKFILL=1 关闭。
+    """
+    if os.environ.get("SPIDER_NO_AUTO_BACKFILL"):
+        return {"enabled": False}
+    actionable = ("intent", "bidding", "change")
+    stats = {"enabled": True, "attempted": 0, "filled": 0, "failed": 0, "per_source": {}}
+    for pid in run_list:
+        if pid not in ("ccgp", "ggzy", "jsggzy"):
+            continue
+        per = {"attempted": 0, "filled": 0}
+        for it in output_items:
+            if per["attempted"] >= per_source_limit:
+                break
+            if it.get("platform") != pid:
+                continue
+            if it.get("amount") is not None:
+                continue  # 已有金额：无需回填
+            stage = it.get("notice_stage") or ""
+            if stage not in actionable:
+                continue  # 只回填可投标线索（结果公告等历史不优先）
+            nid = find_notice_id_by_item(it)
+            if not nid:
+                continue
+            per["attempted"] += 1
+            stats["attempted"] += 1
+            try:
+                out = backfill_notice(nid)
+            except Exception as e:  # noqa: BLE001 —— 单条异常不炸出勤
+                out = {"ok": False, "error": str(e)[:120]}
+            if out.get("ok"):
+                per["filled"] += 1
+                stats["filled"] += 1
+                it["amount"] = out.get("fields", {}).get("amount") or it.get("amount")
+            else:
+                stats["failed"] += 1
+        stats["per_source"][pid] = per
+    return stats
 
 
 def backfill_notice(notice_id: int) -> dict:

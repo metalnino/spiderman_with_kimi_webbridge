@@ -113,5 +113,29 @@ class TestCcgpAgencyParse(unittest.TestCase):
         self.assertEqual(items[0].agency, "某招标代理有限公司")
 
 
+class TestAutoBackfillPass(unittest.TestCase):
+    def test_selects_actionable_missing_amount_only(self):
+        from crawl import backfill as bf
+
+        items = [
+            {"platform": "ccgp", "title": "某招标公告", "url": "u1", "amount": None, "dedupId": "d1", "notice_stage": "bidding"},
+            {"platform": "ccgp", "title": "某结果公告", "url": "u2", "amount": None, "dedupId": "d2", "notice_stage": "result"},
+            {"platform": "ccgp", "title": "已有金额公告", "url": "u3", "amount": 100.0, "dedupId": "d3", "notice_stage": "bidding"},
+            {"platform": "chinabidding", "title": "非HTTP源", "url": "u4", "amount": None, "dedupId": "d4", "notice_stage": "bidding"},
+        ]
+        with mock.patch.object(bf, "find_notice_id_by_item", return_value=7), \
+             mock.patch.object(bf, "backfill_notice", return_value={"ok": True, "fields": {"amount": 5000.0}}):
+            stats = bf.auto_backfill_pass(items, ["ccgp", "chinabidding"], per_source_limit=5)
+        self.assertEqual(stats["attempted"], 1)  # 仅 bidding 且缺金额的 ccgp 条目
+        self.assertEqual(stats["filled"], 1)
+        self.assertEqual(items[0]["amount"], 5000.0)
+
+    def test_env_off(self):
+        from crawl import backfill as bf
+
+        with mock.patch.dict("os.environ", {"SPIDER_NO_AUTO_BACKFILL": "1"}):
+            self.assertEqual(bf.auto_backfill_pass([], ["ccgp"])["enabled"], False)
+
+
 if __name__ == "__main__":
     unittest.main()

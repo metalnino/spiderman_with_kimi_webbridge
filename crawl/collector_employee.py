@@ -40,6 +40,7 @@ from db import connect  # noqa: E402
 
 from crawl import runner  # noqa: E402
 from crawl import tenderfile as tenderfile_mod  # noqa: E402
+from crawl.backfill import auto_backfill_pass  # noqa: E402
 from crawl.models import Notice  # noqa: E402
 from crawl.sources import REGISTRY as SOURCE_REGISTRY  # noqa: E402
 
@@ -579,6 +580,16 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
     # ---- v1.2.0：详情抓取 + 招标文件附件（tenderFile / summary），失败如实 null ----
     detail_stats = _enrich_tenderfiles(output, run_list)
 
+    # ---- P7：出勤后自动回填（可投标阶段缺金额的 HTTP 详情源站条目，每站每轮 ≤5）----
+    stage_by_dedup: dict[str, str | None] = {}
+    for n in collected:
+        stage_by_dedup[to_contract_item(n)["dedupId"]] = _g(n, "notice_stage")
+    for it in output:
+        it["notice_stage"] = stage_by_dedup.get(it["dedupId"])  # 契约 output 无此字段，临时挂载用后即删
+    auto_backfill = auto_backfill_pass(output, run_list)
+    for it in output:
+        it.pop("notice_stage", None)
+
     # 观测指标（严格对齐契约 observability.metrics 七项）
     blocked_errors = list(errors_by_platform) + list(detail_stats["errors"])
     metrics = {
@@ -632,6 +643,7 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
         "detail_fetch_success_rate": detail_stats["success_rate"],
         "open_todos": _open_todo_count(),
         "window_note": window_note,
+        "auto_backfill": auto_backfill,
         # P7 覆盖自证：每站水位推进（wm_new=本轮新见原始 id，wm_total=水位规模，pages=扫描页数）
         "coverage": {
             p["platform"]: p.get("watermark")
@@ -639,6 +651,7 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
         },
     }
     report["briefing"] = briefing
+    report["autoBackfill"] = auto_backfill
 
     report_path = Path(os.environ.get("SPIDER_REPORT_PATH") or REPORT_PATH)
     report_path.parent.mkdir(parents=True, exist_ok=True)
