@@ -38,6 +38,7 @@ config/ocr_api.json
 # 员工采集员运行时产物（每次运行覆写，不入库）
 reports/
 data/collector/*.txt
+data/collector_out_*.json
 data/web/webbridge_server.log
 data/web/webbridge_server.pid
 

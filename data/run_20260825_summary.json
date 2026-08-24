@@ -1,0 +1,215 @@
+{
+  "runs": [
+    {
+      "id": 268,
+      "source_id": "ccgp",
+      "status": "success",
+      "item_count": 0,
+      "note": "raw=318 city_drop=302 date_drop=16 upsert≈0 clean={'pass': 85, 'drop': 7, 'review': 0} detail={'enabled': True, 'candidates': 0, 'enriched': 0} wm_new=30 wm_total=54 pages=50 warm=True kw=['绿植租摆', '绿植租赁', '植物租赁', '绿化租摆', '绿植摆放', '室内植物租赁', '室内绿植', '绿植服务', '花卉租摆', '花卉租赁', '写字楼绿植', '办公楼绿植', '酒店绿植', '大堂绿植', '办公绿化', '办公区绿化', '办公室绿化', '办公场所绿化', '办公楼绿化', '职场绿植绿化'] err=",
+      "started_at": "2026-08-25 01:09:15",
+      "finished_at": "2026-08-25 01:26:25"
+    },
+    {
+      "id": 269,
+      "source_id": "chinabidding",
+      "status": "success",
+      "item_count": 50,
+      "note": "raw=500 city_drop=450 date_drop=0 upsert≈65 clean={'pass': 108, 'drop': 19, 'review': 0} detail={'enabled': False} wm_new=420 wm_total=465 pages=49 warm=False kw=['绿植租摆', '绿植租赁', '植物租赁', '绿化租摆', '绿植摆放', '室内植物租赁', '室内绿植', '绿植服务', '花卉租摆', '花卉租赁', '写字楼绿植', '办公楼绿植', '酒店绿植', '大堂绿植', '办公绿化', '办公区绿化', '办公室绿化', '办公场所绿化', '办公楼绿化', '职场绿植绿化'] err=",
+      "started_at": "2026-08-25 01:26:25",
+      "finished_at": "2026-08-25 01:35:57"
+    },
+    {
+      "id": 270,
+      "source_id": "ggzy",
+      "status": "success",
+      "item_count": 10,
+      "note": "raw=127 city_drop=106 date_drop=11 upsert≈12 clean={'pass': 116, 'drop': 19, 'review': 0} detail={'enabled': False} wm_new=97 wm_total=117 pages=37 warm=False kw=['绿植租摆', '绿植租赁', '植物租赁', '绿化租摆', '绿植摆放', '室内植物租赁', '室内绿植', '绿植服务', '花卉租摆', '花卉租赁', '写字楼绿植', '办公楼绿植', '酒店绿植', '大堂绿植', '办公绿化', '办公区绿化', '办公室绿化', '办公场所绿化', '办公楼绿化', '职场绿植绿化'] err=",
+      "started_at": "2026-08-25 01:35:57",
+      "finished_at": "2026-08-25 01:43:09"
+    },
+    {
+      "id": 271,
+      "source_id": "jsggzy",
+      "status": "success",
+      "item_count": 20,
+      "note": "raw=74 city_drop=54 date_drop=0 upsert≈21 clean={'pass': 135, 'drop': 19, 'review': 0} detail={'enabled': False} wm_new=64 wm_total=74 pages=20 warm=False kw=['绿植租摆', '绿植租赁', '植物租赁', '绿化租摆', '绿植摆放', '室内植物租赁', '室内绿植', '绿植服务', '花卉租摆', '花卉租赁', '写字楼绿植', '办公楼绿植', '酒店绿植', '大堂绿植', '办公绿化', '办公区绿化', '办公室绿化', '办公场所绿化', '办公楼绿化', '职场绿植绿化'] err=",
+      "started_at": "2026-08-25 01:43:09",
+      "finished_at": "2026-08-25 01:50:56"
+    },
+    {
+      "id": 272,
+      "source_id": "cebpub",
+      "status": "success",
+      "item_count": 20,
+      "note": "cebpub-pw items=20",
+      "started_at": "2026-08-25 01:50:57",
+      "finished_at": "2026-08-25 01:54:37"
+    },
+    {
+      "id": 273,
+      "source_id": "jiangsu_zhaobiao",
+      "status": "success",
+      "item_count": 130,
+      "note": "jiangsu-wb items=130",
+      "started_at": "2026-08-25 01:54:37",
+      "finished_at": "2026-08-25 02:00:41"
+    },
+    {
+      "id": 274,
+      "source_id": "yfbzb",
+      "status": "success",
+      "item_count": 90,
+      "note": "raw=506 city_drop=404 date_drop=12 upsert≈120 clean={'pass': 247, 'drop': 23, 'review': 0} detail={'enabled': True, 'candidates': 5, 'enriched': 0} wm_new=393 wm_total=483 pages=42 warm=False kw=['绿植租摆', '绿植租赁', '植物租赁', '绿化租摆', '绿植摆放', '室内植物租赁', '室内绿植', '绿植服务', '花卉租摆', '花卉租赁', '写字楼绿植', '办公楼绿植', '酒店绿植', '大堂绿植', '办公绿化', '办公区绿化', '办公室绿化', '办公场所绿化', '办公楼绿化', '职场绿植绿化'] err=",
+      "started_at": "2026-08-25 02:00:42",
+      "finished_at": "2026-08-25 02:10:53"
+    },
+    {
+      "id": 275,
+      "source_id": "qianlima",
+      "status": "failed",
+      "item_count": 0,
+      "note": "raw=0 city_drop=0 date_drop=0 upsert≈0 clean={'pass': 183, 'drop': 17, 'review': 0} detail={'enabled': True, 'candidates': 5, 'enriched': 0} wm_new=0 wm_total=60 pages=50 warm=False kw=['绿植租摆', '绿植租赁', '植物租赁', '绿化租摆', '绿植摆放', '室内植物租赁', '室内绿植', '绿植服务', '花卉租摆', '花卉租赁', '写字楼绿植', '办公楼绿植', '酒店绿植', '大堂绿植', '办公绿化', '办公区绿化', '办公室绿化', '办公场所绿化', '办公楼绿化', '职场绿植绿化'] err=qianlima search failed: http failed: https://search.qianlima.com/api/v1/website/search?filtermode=1&timeType=101&areas=&types=-1&searchMode",
+      "started_at": "2026-08-25 02:10:53",
+      "finished_at": "2026-08-25 02:20:49"
+    },
+    {
+      "id": 276,
+      "source_id": "tgnet",
+      "status": "success",
+      "item_count": 186,
+      "note": "tgnet-pw items=186",
+      "started_at": "2026-08-25 02:20:50",
+      "finished_at": "2026-08-25 02:24:42"
+    },
+    {
+      "id": 277,
+      "source_id": "rccchina",
+      "status": "failed",
+      "item_count": 0,
+      "note": "raw=0 city_drop=0 date_drop=0 upsert≈0 clean={'pass': 150, 'drop': 50, 'review': 0} detail={'enabled': False} wm_new=0 wm_total=0 pages=0 warm=False kw=['绿植租摆', '绿植租赁', '植物租赁', '绿化租摆', '绿植摆放', '室内植物租赁', '室内绿植', '绿植服务', '花卉租摆', '花卉租赁', '写字楼绿植', '办公楼绿植', '酒店绿植', '大堂绿植', '办公绿化', '办公区绿化', '办公室绿化', '办公场所绿化', '办公楼绿化', '职场绿植绿化'] err=rccchina register_wall: 招采数据需注册账号（手机号+短信验证码），已登记待办",
+      "started_at": "2026-08-25 02:24:42",
+      "finished_at": "2026-08-25 02:25:40"
+    }
+  ],
+  "keyword_counts": [
+    {
+      "keyword": "绿植租摆",
+      "c": 60
+    },
+    {
+      "keyword": "绿化租摆",
+      "c": 48
+    },
+    {
+      "keyword": "绿植租赁",
+      "c": 37
+    },
+    {
+      "keyword": "花卉租赁",
+      "c": 31
+    },
+    {
+      "keyword": "室内绿植",
+      "c": 31
+    },
+    {
+      "keyword": "绿植摆放",
+      "c": 24
+    },
+    {
+      "keyword": "绿植服务",
+      "c": 18
+    },
+    {
+      "keyword": "办公室绿化",
+      "c": 17
+    },
+    {
+      "keyword": "花卉租摆",
+      "c": 17
+    },
+    {
+      "keyword": "植物租赁",
+      "c": 15
+    },
+    {
+      "keyword": "办公场所绿化",
+      "c": 13
+    },
+    {
+      "keyword": "办公楼绿植",
+      "c": 13
+    },
+    {
+      "keyword": "室内植物租赁",
+      "c": 12
+    },
+    {
+      "keyword": "写字楼绿植",
+      "c": 10
+    },
+    {
+      "keyword": "职场绿植绿化",
+      "c": 10
+    },
+    {
+      "keyword": "办公区绿化",
+      "c": 9
+    },
+    {
+      "keyword": "办公楼绿化",
+      "c": 9
+    },
+    {
+      "keyword": "办公绿化",
+      "c": 6
+    },
+    {
+      "keyword": "大堂绿植",
+      "c": 5
+    },
+    {
+      "keyword": "酒店绿植",
+      "c": 5
+    }
+  ],
+  "total_notices": 390,
+  "city_counts": [
+    {
+      "city": null,
+      "c": 79
+    },
+    {
+      "city": "南京",
+      "c": 78
+    },
+    {
+      "city": "苏州",
+      "c": 76
+    },
+    {
+      "city": "深圳",
+      "c": 47
+    },
+    {
+      "city": "上海",
+      "c": 36
+    },
+    {
+      "city": "合肥",
+      "c": 24
+    },
+    {
+      "city": "杭州",
+      "c": 22
+    },
+    {
+      "city": "武汉",
+      "c": 15
+    },
+    {
+      "city": "广州",
+      "c": 13
+    }
+  ]
+}
