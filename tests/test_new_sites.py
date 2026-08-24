@@ -131,11 +131,27 @@ class TestRccchina(unittest.TestCase):
         from crawl.sources.rccchina import RccchinaSource
 
         src = RccchinaSource()
-        with mock.patch("crawl.sources.rccchina.open_todo") as todo:
+        with mock.patch("crawl.sources.rccchina.open_todo") as todo, mock.patch(
+            "crawl.sources.rccchina.cookie_store.cookie_header", return_value=None
+        ):
             with self.assertRaises(SourceError) as ctx:
                 list(src.fetch(["绿植租摆"], max_pages=1))
         self.assertIn("register_wall", str(ctx.exception))
         self.assertTrue(todo.called)  # 注册墙登记待办，绝不伪造数据
+
+    def test_cookie_present_honest_unmapped(self):
+        """已有 Cookie 但搜索接口未接线：如实报错，不重复挂待办、不编造 0。"""
+        from crawl.sources.base import SourceError
+        from crawl.sources.rccchina import RccchinaSource
+
+        src = RccchinaSource()
+        with mock.patch("crawl.sources.rccchina.open_todo") as todo, mock.patch(
+            "crawl.sources.rccchina.cookie_store.cookie_header", return_value="sid=abc; token=x"
+        ):
+            with self.assertRaises(SourceError) as ctx:
+                list(src.fetch(["绿植租摆"], max_pages=1))
+        self.assertIn("cookie_ok_api_unmapped", str(ctx.exception))
+        self.assertFalse(todo.called)  # 已有 cookie 不再重复挂待办
 
 
 class TestRouting(unittest.TestCase):

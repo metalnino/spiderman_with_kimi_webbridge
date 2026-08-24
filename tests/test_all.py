@@ -234,6 +234,29 @@ class TestCaptchaFlow(unittest.TestCase):
         self.assertEqual(cookie_store.cookie_header("cebpub"), "sid=abc; path=/")
         cookie_store.path_for("cebpub").unlink(missing_ok=True)
 
+    def test_resolve_prefers_cdp_full_cookies(self):
+        """CDP 全量（含 HttpOnly）优先于 document.cookie 兜底。"""
+        from crawl.captcha_flow import resolve_todo
+        from crawl.captcha_queue import open_todo
+        from crawl import cookie_store
+
+        tid = open_todo("rccchina", "https://bid.rccchina.com/login", "登录单元测试", "ut")
+        doc = {"ok": True, "cookie": "only_public=1", "href": "https://bid.rccchina.com/login"}
+        full = {
+            "ok": True,
+            "cookie": "only_public=1; SESSION=http_only_secret",
+            "cookies": [{"name": "SESSION", "value": "http_only_secret", "httpOnly": True}],
+        }
+        with mock.patch("crawl.captcha_flow.webbridge_client.export_document_cookie", return_value=doc), mock.patch(
+            "crawl.captcha_flow.webbridge_client.export_cookies", return_value=full
+        ) as exp:
+            done = resolve_todo(tid)
+        self.assertTrue(done.get("ok"))
+        self.assertTrue(done.get("cookie_saved"))
+        self.assertIn("http_only_secret", cookie_store.cookie_header("rccchina") or "")
+        exp.assert_called_once()
+        cookie_store.path_for("rccchina").unlink(missing_ok=True)
+
 
 class TestDBOps(unittest.TestCase):
     @classmethod

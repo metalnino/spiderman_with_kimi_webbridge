@@ -86,11 +86,26 @@ def resolve_todo(todo_id: int, *, cookie_header: str | None = None, note: str | 
     cookie = (cookie_header or "").strip()
     export: dict = {"ok": False}
     if not cookie:
+        # ① CDP 全量（含 HttpOnly）优先；url 用页面真实 href + 待办目标兜底
+        try:
+            urls = [w for w in (_target_url(todo),) if w.startswith("http")]
+            doc = webbridge_client.export_document_cookie(session)
+            if doc.get("ok") and (doc.get("href") or "").startswith("http"):
+                urls.insert(0, doc["href"])
+            export = webbridge_client.export_cookies(urls, session=session)
+            if export.get("ok") and export.get("cookie"):
+                cookie = export["cookie"]
+            else:
+                export = {"ok": False, "error": export.get("error"), "cookie": ""}
+        except Exception as e:  # noqa: BLE001 —— CDP 不可用时退回 document.cookie
+            export = {"ok": False, "error": str(e)[:200], "cookie": ""}
+    if not cookie:
+        # ② document.cookie（非 HttpOnly）兜底
         export = webbridge_client.export_document_cookie(session)
         if export.get("ok") and export.get("cookie"):
             cookie = export["cookie"]
     if not cookie:
-        # 尝试同源暖会话名
+        # ③ 同源暖会话名兜底
         export2 = webbridge_client.export_document_cookie(f"warm-{source_id}")
         if export2.get("ok") and export2.get("cookie"):
             cookie = export2["cookie"]
@@ -116,7 +131,7 @@ def resolve_todo(todo_id: int, *, cookie_header: str | None = None, note: str | 
         "cookie_len": len(cookie) if cookie else 0,
         "path": saved_path,
         "export_ok": bool(export.get("ok")),
-        "warning": None if cookie else "未拿到 Cookie（可能全是 HttpOnly）；待办已关，可下次重开或手动粘贴 Cookie",
+        "warning": None if cookie else "未拿到 Cookie（CDP 全量导出与 document.cookie 均失败）；待办已关，可下次重开或手动粘贴 Cookie",
     }
 
 

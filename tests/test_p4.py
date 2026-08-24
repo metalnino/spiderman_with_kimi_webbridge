@@ -75,7 +75,9 @@ class TestLedgerApiP4(unittest.TestCase):
         self.assertEqual(r.status_code, 200)
         body = r.json()
         self.assertTrue(body.get("folded"))
-        self.assertEqual(body["total"], len(body["items"]))
+        # 分页语义：total 是全量折叠数（数据增长可 > limit），items 受 limit 截断
+        self.assertGreaterEqual(body["total"], len(body["items"]))
+        self.assertLessEqual(len(body["items"]), 200)
         for it in body["items"]:
             if it.get("dup_count"):
                 self.assertGreaterEqual(it["dup_count"], 2)

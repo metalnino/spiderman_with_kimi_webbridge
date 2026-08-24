@@ -189,3 +189,29 @@ def export_document_cookie(session: str) -> dict:
             "title": val.get("title"),
         }
     return {"ok": True, "cookie": str(val or ""), "raw": val}
+
+
+def cdp(method: str, params: dict | None = None, *, session: str, timeout: int = 60) -> dict:
+    """原始 CDP 透传（扩展白名单：Network.getCookies / Runtime.evaluate 等）。"""
+    return call("cdp", {"method": method, "params": params or {}}, session=session, timeout=timeout)
+
+
+def export_cookies(url: str, *, session: str) -> dict:
+    """按 url 取全量 Cookie（含 HttpOnly）via CDP Network.getCookies。
+
+    返回 {ok, cookie(header 串), cookies(list), error}。
+    与 export_document_cookie 的区别：document.cookie 拿不到 HttpOnly，这里能拿全。
+    """
+    urls = [url] if isinstance(url, str) else list(url)
+    r = cdp("Network.getCookies", {"urls": urls}, session=session)
+    if not r.get("ok"):
+        return {"ok": False, "error": r.get("error"), "cookie": "", "cookies": []}
+    data = r.get("data") or {}
+    if isinstance(data, str):
+        try:
+            data = json.loads(data)
+        except Exception:
+            data = {}
+    cookies = (data or {}).get("cookies") or []
+    parts = [f"{c['name']}={c['value']}" for c in cookies if c.get("name") is not None]
+    return {"ok": True, "cookie": "; ".join(parts), "cookies": cookies}

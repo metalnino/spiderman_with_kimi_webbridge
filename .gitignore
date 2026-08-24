@@ -29,6 +29,9 @@ data/web/zhaobiao_*
 # 人工划码回灌的 Cookie（勿提交）
 data/sessions/
 
+# DSH 运行态目录（harness 会话状态，非项目内容）
+.dsh/
+
 # OCR API 密钥（勿提交）
 config/ocr_api.json
 

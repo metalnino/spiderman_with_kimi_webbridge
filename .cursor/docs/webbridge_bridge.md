@@ -47,3 +47,24 @@ HTTP /command：body {action,args,session} → {ok:true,data:...}；
 - 桥命令串行执行（服务端加锁），符合反爬串行纪律；jiangsu 仍按 4~6 小时一轮的节奏跑。
 - 桥不在线 ≠ 站点封禁：观测报告里不计 blocked_count，只在 empty_platforms/错误串里体现。
 
+## 扩展工具清单（2026-08-25 实测，v1.11.6；未知工具名会回错并附此清单）
+
+navigate, find_tab, evaluate, network, snapshot, click, fill, mouse_click, cdp,
+key_type, send_keys, screenshot, save_as_pdf, upload, close_tab, list_tabs, close_session
+
+## CDP 透传（全量 Cookie 导出，含 HttpOnly）
+
+`document.cookie` 拿不到 HttpOnly；扩展的 `cdp` 工具支持白名单 CDP 方法，可直取全量：
+
+```python
+from crawl import webbridge_client as wb
+out = wb.export_cookies("https://bid.rccchina.com/", session="captcha-<todo_id>")
+# → {ok, cookie: "a=1; SESSION=...", cookies: [{name,value,httpOnly,...}]}
+```
+
+- 可用：`Network.getCookies`（按 urls 过滤，实测通）、`Runtime.evaluate`；
+- **不可用**：`Browser.getVersion`（回 -32601）、`Network.getAllCookies`（整浏览器导出，会挂起超时）—— 一律用 getCookies + 按站点 url 过滤。
+- 接线点：crawl/captcha_flow.resolve_todo —— CDP 全量 → document.cookie → warm 会话，三级兜底存 cookie_store。
+- 登录待办闭环：源站撞登录墙登记 captcha_todos → ledger「验证码待办」点「打开」（桥开登录页）→ 人工手机号+短信登录 → 点「已解决」→ 全量 Cookie 落 data/sessions/<source>.cookies.json → HTTP 源自动复用（cookie 失效再撞墙自动重新挂待办）。
+
+
