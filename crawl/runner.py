@@ -92,6 +92,12 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
             err = err2 if not more else (err2 or None)
             print(f"[run] {source_id} 频控重试: +{len(more)} 条, err={err2}", flush=True)
     raw_total = len(notices)
+    # P7 召回自证：水位合并用「原始已见」id（含后续被城市/日期过滤丢弃的），
+    # 下一轮才能越过已见页继续深扫；同时给出 wm_new/wm_total 让 0 新增可自证。
+    from crawl import watermark as wm_mod
+
+    wm_new, wm_total = wm_mod.merge(source_id, [n.external_id for n in notices if n.external_id])
+    scanned_pages = getattr(src, "last_scanned_pages", None)
     if only_target_cities():
         targets = set(target_city_names())
         notices = [n for n in notices if (n.city or "") in targets]
@@ -112,6 +118,7 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
     note = (
         f"raw={raw_total} city_drop={city_drop} date_drop={date_drop} "
         f"upsert≈{stats['affected']} clean={clean_stats} detail={detail_stats} "
+        f"wm_new={wm_new} wm_total={wm_total} pages={scanned_pages} "
         f"warm={warm_info.get('warmed')} kw={kws} err={err or ''}"
     )[:500]
     if err and ("captcha" in err.lower() or "rate_limited" in err.lower() or "829" in err):
@@ -128,6 +135,7 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
         "clean": clean_stats,
         "detail": detail_stats,
         "warm": warm_info,
+        "watermark": {"new": wm_new, "total": wm_total, "pages": scanned_pages},
         "error": err,
         "raw_total": raw_total,
         "notices": notice_dicts,

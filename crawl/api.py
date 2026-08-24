@@ -90,6 +90,7 @@ def notices(
     offset: int = 0,
     target_only: bool = False,
     stage: str | None = None,
+    actionable: bool = False,
 ):
     return data.notices(
         source_id=source_id,
@@ -106,6 +107,7 @@ def notices(
         offset=offset,
         target_only=target_only,
         stage=stage,
+        actionable=actionable,
     )
 
 
@@ -123,12 +125,13 @@ def notices_export(
     sort: str = "created",
     target_only: bool = False,
     stage: str | None = None,
+    actionable: bool = False,
 ):
     csv_text = data.export_csv(
         source_id=source_id, province=province, city=city, clean_status=clean_status,
         only_pass=only_pass, q=q, lead_status=lead_status,
         amount_min=amount_min, amount_max=amount_max, sort=sort, target_only=target_only,
-        stage=stage,
+        stage=stage, actionable=actionable,
     )
     return Response(
         content=csv_text.encode("utf-8"),

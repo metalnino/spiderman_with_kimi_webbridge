@@ -486,7 +486,8 @@ class TestResilience(unittest.TestCase):
         fake_time = mock.Mock()
         cfg = {"per_source": {"ccgp": {"block_cooldown_sec": [1, 2, 3], "max_block_retries": 3}}}
         with mock.patch("crawl.sources.ccgp.time", fake_time), \
-             mock.patch("crawl.sources.ccgp.anti_bot_cfg", return_value=cfg):
+             mock.patch("crawl.sources.ccgp.anti_bot_cfg", return_value=cfg), \
+             mock.patch.dict("os.environ", {"SPIDER_CCGP_MAX_PAGES": "1"}):  # P7：默认 6 页，旧用例锁 1 页
             items = list(src.fetch(["绿植租摆"], max_pages=1))
         self.assertEqual(len(items), 1)
         self.assertEqual(items[0].city, "上海")

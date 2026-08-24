@@ -550,6 +550,7 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
             "dedup_new": new_hashes,
             "raw_total": res.get("raw_total"),
             "kernel_run_id": res.get("run_id"),
+            "watermark": res.get("watermark"),
             "error": err,
         })
         collected.extend(notices)
@@ -631,6 +632,11 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
         "detail_fetch_success_rate": detail_stats["success_rate"],
         "open_todos": _open_todo_count(),
         "window_note": window_note,
+        # P7 覆盖自证：每站水位推进（wm_new=本轮新见原始 id，wm_total=水位规模，pages=扫描页数）
+        "coverage": {
+            p["platform"]: p.get("watermark")
+            for p in per_platform if isinstance(p.get("watermark"), dict)
+        },
     }
     report["briefing"] = briefing
 

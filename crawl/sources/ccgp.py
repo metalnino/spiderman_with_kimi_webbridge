@@ -10,6 +10,7 @@ from typing import Iterable
 from crawl.config_loader import anti_bot_cfg, sources_cfg
 from crawl.models import Notice
 from crawl.sources.base import BaseSource, SourceError
+from crawl import watermark  # noqa: E402  (P7 水位：整页已见即停)
 
 # 频控页特征：正文含这些字样（页面极短，约 2.7KB）
 BLOCK_MARKERS = ("访问过于频繁", "您的访问过于频繁", "频繁访问", "操作频繁")
@@ -102,12 +103,19 @@ class CcgpSource(BaseSource):
         )
 
     # -- 主流程 -----------------------------------------------------------
-    def fetch(self, keywords: list[str], *, max_pages: int = 1) -> Iterable[Notice]:
+    def fetch(self, keywords: list[str], *, max_pages: int = 1,
+              start_time: str | None = None, end_time: str | None = None) -> Iterable[Notice]:
         cfg = sources_cfg().get("ccgp") or {}
         time_type = str(cfg.get("time_type") or "5")
+        # P7 召回：ccgp 默认最多扫 SPIDER_CCGP_MAX_PAGES 页（未设则 max(6, max_pages)），
+        # 碰到「整页已见」即停（水位边界）——不再永远只扫第一页。
+        env_pages = os.environ.get("SPIDER_CCGP_MAX_PAGES")
+        pages_cap = int(env_pages) if env_pages and env_pages.strip().isdigit() else max(6, max_pages)
+        self.last_scanned_pages = 0
+        wm = watermark.load(self.source_id)
         collected: list[Notice] = []
         for kw in keywords:
-            for page in range(1, max_pages + 1):
+            for page in range(1, pages_cap + 1):
                 q = urllib.parse.urlencode(
                     {
                         "searchtype": "1",
@@ -120,11 +128,14 @@ class CcgpSource(BaseSource):
                         "dbselect": "bidx",
                         "kw": kw,
                         "timeType": time_type,
+                        **({"start_time": start_time} if start_time else {}),
+                        **({"end_time": end_time} if end_time else {}),
                     }
                 )
                 url = "https://search.ccgp.gov.cn/bxsearch?" + q
                 html = self._fetch_page(url, collected)
                 items = self._parse(html, kw)
+                self.last_scanned_pages += 1
                 if not items and "cggg/" in html:
                     # 页面有结果链接但解析为 0 → 版面变化预警，绝不静默当「无结果」
                     print("[ccgp] WARN: 页面含结果链接但解析为 0 条，疑似版面变化", flush=True)
@@ -134,6 +145,9 @@ class CcgpSource(BaseSource):
                 self.http.sleep()
                 if not items:
                     # 该词无结果或结果尽：不再翻页
+                    break
+                if wm and items and all(n.external_id in wm for n in items):
+                    # 水位边界：整页原始已见 → 更深页不再扫（时间倒序排序下更旧）
                     break
 
     def _parse(self, html: str, kw: str) -> list[Notice]:
@@ -166,6 +180,10 @@ class CcgpSource(BaseSource):
             mb = re.search(r"采购人[：:]\s*([^|]+)", text)
             if mb:
                 buyer = mb.group(1).strip()[:80]
+            agency = None
+            ma = re.search(r"代理机构[：:]\s*([^|]+)", text)
+            if ma:
+                agency = ma.group(1).strip()[:80]
             region = self.extract_region(text)
             city = self.city_for((buyer or "") + " " + title, region)
             notice_type = self.extract_notice_type(text)
@@ -183,6 +201,7 @@ class CcgpSource(BaseSource):
                     region_text=region,
                     keyword=kw,
                     buyer=buyer,
+                    agency=agency,
                     notice_type=notice_type,
                     detail_url=href,
                     bid_status="未知",

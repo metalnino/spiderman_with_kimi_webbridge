@@ -137,10 +137,13 @@ _SORTS = {
 def _build_notices_where(
     source_id=None, province=None, city=None, clean_status=None, only_pass=False,
     q=None, lead_status=None, amount_min=None, amount_max=None, target_only=False,
-    stage=None,
+    stage=None, actionable=False,
 ) -> tuple[str, list[Any]]:
     where = ["1=1"]
     args: list[Any] = []
+    if actionable:
+        # 公司视角：可投标线索 = 意向/招标/更正（结果/终止等是历史与背景）
+        where.append("notice_stage IN ('intent','bidding','change')")
     if source_id:
         where.append("source_id=%s")
         args.append(source_id)
@@ -253,12 +256,13 @@ def notices(
     offset: int = 0,
     target_only: bool = False,
     stage: str | None = None,
+    actionable: bool = False,
 ) -> dict:
     limit = clamp_limit(limit)
     offset = clamp_offset(offset)
     wsql, args = _build_notices_where(
         source_id, province, city, clean_status, only_pass, q,
-        lead_status, amount_min, amount_max, target_only, stage,
+        lead_status, amount_min, amount_max, target_only, stage, actionable,
     )
     order = _SORTS.get(sort, _SORTS["created"])
     total = int(
@@ -345,7 +349,7 @@ def export_csv(**filters) -> str:
         filters.get("source_id"), filters.get("province"), filters.get("city"),
         filters.get("clean_status"), filters.get("only_pass"), filters.get("q"),
         filters.get("lead_status"), filters.get("amount_min"), filters.get("amount_max"),
-        filters.get("target_only"), filters.get("stage"),
+        filters.get("target_only"), filters.get("stage"), filters.get("actionable"),
     )
     order = _SORTS.get(filters.get("sort"), _SORTS["created"])
     rows = _rows(f"SELECT {NOTICE_SELECT} FROM notices WHERE {wsql} ORDER BY {order} LIMIT 5000", tuple(args))
