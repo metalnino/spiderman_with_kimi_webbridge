@@ -71,6 +71,36 @@ def size(source_id: str) -> int:
     return len(_load_ordered(source_id))
 
 
+def get_last_pages(source_id: str) -> int | None:
+    """该站历史最深扫描页数（用于已见边界可信性：只信任「曾扫得更深」的边界）。"""
+    p = _path(source_id)
+    if not p.exists():
+        return None
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        v = data.get("last_scan_pages")
+        return int(v) if v is not None else None
+    except (OSError, json.JSONDecodeError, ValueError):
+        return None
+
+
+def set_last_pages(source_id: str, pages: int) -> None:
+    """记录本轮实际扫描页数（边界判断用；冷启动 last=0 → 不提前停，翻到空/上限）。"""
+    if pages is None:
+        return
+    p = _path(source_id)
+    data: dict = {"updated_at": "", "ids": []}
+    if p.exists():
+        try:
+            data = json.loads(p.read_text(encoding="utf-8"))
+        except (OSError, json.JSONDecodeError):
+            data = {"updated_at": "", "ids": []}
+    data["updated_at"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    data["last_scan_pages"] = int(pages)
+    WATERMARK_DIR.mkdir(parents=True, exist_ok=True)
+    p.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+
+
 def reset(source_id: str) -> None:
     p = _path(source_id)
     if p.exists():

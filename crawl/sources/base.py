@@ -44,10 +44,17 @@ class BaseSource(ABC):
     def _wm_seen(self) -> set[str]:
         return watermark.load(self.source_id)
 
-    def _page_all_seen(self, notices: list) -> bool:
-        """整页原始 external_id 全部已在水位内 → 更深页不再扫（时间倒序语义）。"""
+    def _page_all_seen(self, notices: list, page: int = 1) -> bool:
+        """整页原始 external_id 全部已见 **且历史曾扫得更深** → 边界可信，更深页不再扫。
+
+        冷启动保护：水位只来自第 1 页时（last_scan_pages ≤ 当前页），第 2+ 页可能从未见过，
+        「整页已见→更深页更旧」不成立，必须继续翻到空/上限。
+        """
         wm = self._wm_seen()
-        return bool(wm and notices and all(getattr(n, "external_id", None) in wm for n in notices))
+        if not (wm and notices and all(getattr(n, "external_id", None) in wm for n in notices)):
+            return False
+        last = watermark.get_last_pages(self.source_id) or 0
+        return last > page
 
     def _count_page(self) -> None:
         self.last_scanned_pages += 1

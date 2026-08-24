@@ -66,6 +66,7 @@ class TestCcgpWatermarkBoundary(unittest.TestCase):
                 }
                 # 第 2 页两 id 也全部进水位（模拟上一轮已扫到第 2 页）
                 watermark.merge("ccgp", ["20260803", "20260804"])
+                watermark.set_last_pages("ccgp", 3)  # 历史曾扫得更深 → 边界可信
 
                 def fake_get_text(url, headers=None):
                     for k, v in pages.items():
@@ -76,12 +77,39 @@ class TestCcgpWatermarkBoundary(unittest.TestCase):
                 with mock.patch.object(src.http, "get_text", side_effect=fake_get_text), \
                      mock.patch.object(src.http, "sleep", return_value=None):
                     notices = list(src.fetch(["绿植租摆"], max_pages=1))
-                # 第 1 页含新 id（旧B）→ 继续；第 2 页整页已见 → 停
+                # 第 1 页含新 id（旧B）→ 继续；第 2 页整页已见且历史更深 → 停
                 self.assertEqual(src.last_scanned_pages, 2)
                 self.assertEqual(len(notices), 4)
                 ids = {n.external_id for n in notices}
                 self.assertIn("20260802", ids)
                 self.assertIn("20260803", ids)
+
+    def test_cold_start_scans_past_seen_page(self):
+        # 冷启动保护：水位只来自第 1 页（last_scan_pages=0）→ 第 1 页全见也不停，翻到空/上限
+        from crawl import watermark
+        from crawl.sources.ccgp import CcgpSource
+
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(watermark, "WATERMARK_DIR", Path(td)):
+                watermark.merge("ccgp", ["20260801", "20260802"])
+                src = CcgpSource()
+                pages = {
+                    "page_index=1": _mk_html([(1, "旧公告A"), (2, "旧公告B")]),
+                    "page_index=2": _mk_html([(3, "更深公告C")]),
+                    "page_index=3": _mk_html([(4, "更深公告D")]),
+                }
+
+                def fake_get_text(url, headers=None):
+                    for k, v in pages.items():
+                        if k in url:
+                            return v
+                    return "<html></html>"
+
+                with mock.patch.object(src.http, "get_text", side_effect=fake_get_text), \
+                     mock.patch.object(src.http, "sleep", return_value=None), \
+                     mock.patch.dict("os.environ", {"SPIDER_CCGP_MAX_PAGES": "3"}):
+                    list(src.fetch(["绿植租摆"], max_pages=1))
+                self.assertEqual(src.last_scanned_pages, 3)  # 冷启动不提前停
 
     def test_no_watermark_scans_cap(self):
         from crawl import watermark
@@ -127,6 +155,7 @@ class TestGgzyWatermarkBoundary(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             with mock.patch.object(watermark, "WATERMARK_DIR", Path(td)):
                 watermark.merge("ggzy", ["1", "2"])
+                watermark.set_last_pages("ggzy", 2)  # 历史曾扫得更深 → 边界可信
                 src = GgzySource()
                 pages = {
                     1: {"code": 200, "data": {"records": [self._rec("1", "旧公告一"), self._rec("2", "旧公告二")]}},
@@ -164,7 +193,7 @@ class TestGgzyWatermarkBoundary(unittest.TestCase):
 
 
 class TestCcgpBackfillJob(unittest.TestCase):
-    """回溯作业离线验证：逐日推进 + 断点续扫 + 状态落盘（不碰网络/DB）。"""
+    """回溯作业离线验证：多页全窗口扫描 + 空页/水位边界停（不碰网络/DB）。"""
 
     def _load_job(self):
         import importlib.util
@@ -176,47 +205,68 @@ class TestCcgpBackfillJob(unittest.TestCase):
         spec.loader.exec_module(mod)
         return mod
 
+    def _mk(self, rid, city="南京", pub="2026-07-10 10:00:00"):
+        from crawl.models import Notice
+
+        return Notice(source_id="ccgp", source_name="中国政府采购网", external_id=rid,
+                      title=f"绿植租摆项目{rid}", publish_date=pub, city=city,
+                      detail_url=f"https://www.ccgp.gov.cn/cggg/dfgg/t{rid}_1.htm")
+
     class FakeSource:
-        last_scanned_pages = 0
+        def __init__(self, pages):
+            self.pages = pages
+            self.calls = 0
 
-        def fetch(self, keywords, *, max_pages=1, start_time=None, end_time=None):
-            return []
+        def _fetch_page(self, url, collected):
+            self.calls += 1
+            return "html"
 
-    def test_two_day_run_completes(self):
+        def _parse(self, html, kw):
+            return list(self.pages[min(self.calls, len(self.pages)) - 1])
+
+    def test_scan_pages_until_empty(self):
         from crawl import watermark
 
         job = self._load_job()
+        p1 = [self._mk("20260701"), self._mk("20260702", city="北京")]
+        p2 = [self._mk("20260703")]
         with tempfile.TemporaryDirectory() as td:
-            with mock.patch.object(watermark, "WATERMARK_DIR", Path(td) / "wm"), \
-                 mock.patch.object(job, "STATE_PATH", Path(td) / "wm" / "ccgp_backfill_state.json"), \
-                 mock.patch.object(job, "CcgpSource", self.FakeSource), \
+            with mock.patch.object(watermark, "WATERMARK_DIR", Path(td)), \
+                 mock.patch.object(job, "CcgpSource", lambda: self.FakeSource([p1, p2, []])), \
                  mock.patch.object(job, "upsert_notices", return_value={"attempted": 0, "affected": 0}):
-                rc = job.main(["--start", "2026-07-01", "--end", "2026-07-02"])
-            self.assertEqual(rc, 0)
-            state = json.loads((Path(td) / "wm" / "ccgp_backfill_state.json").read_text(encoding="utf-8"))
-            self.assertTrue(state.get("done"))
-            self.assertEqual(state.get("next_day"), "2026-07-03")
+                rc = job.main(["--max-pages", "5"])
+        self.assertEqual(rc, 0)  # 空页即停，不炸
 
-    def test_failure_day_preserves_resume_point(self):
+    def test_boundary_stops_before_older_pages(self):
         from crawl import watermark
 
         job = self._load_job()
+        p1 = [self._mk("20260701"), self._mk("20260702", city="北京")]
+        p2 = [self._mk("20260703")]
+        with tempfile.TemporaryDirectory() as td:
+            with mock.patch.object(watermark, "WATERMARK_DIR", Path(td)):
+                watermark.merge("ccgp", ["20260701", "20260702"])  # 第 1 页整页已见
+                watermark.set_last_pages("ccgp", 2)  # 历史曾扫得更深 → 边界可信
+                fake = self.FakeSource([p1, p2, []])
+                with mock.patch.object(job, "CcgpSource", lambda: fake), \
+                     mock.patch.object(job, "upsert_notices", return_value={"attempted": 0, "affected": 0}):
+                    rc = job.main(["--max-pages", "5"])
+        self.assertEqual(rc, 0)
+        self.assertEqual(fake.calls, 1)  # 第 2 页（更旧）不扫
 
-        class BoomSource:
-            last_scanned_pages = 0
+    def test_fetch_failure_exit1(self):
+        job = self._load_job()
 
-            def fetch(self, keywords, *, max_pages=1, start_time=None, end_time=None):
+        class Boom:
+            def _fetch_page(self, url, collected):
                 raise RuntimeError("ccgp rate_limited")
 
-        with tempfile.TemporaryDirectory() as td:
-            with mock.patch.object(watermark, "WATERMARK_DIR", Path(td) / "wm"), \
-                 mock.patch.object(job, "STATE_PATH", Path(td) / "wm" / "ccgp_backfill_state.json"), \
-                 mock.patch.object(job, "CcgpSource", BoomSource):
-                rc = job.main(["--start", "2026-07-01", "--end", "2026-07-02"])
-            self.assertEqual(rc, 1)
-            state = json.loads((Path(td) / "wm" / "ccgp_backfill_state.json").read_text(encoding="utf-8"))
-            self.assertEqual(state.get("next_day"), "2026-07-01")  # 失败日不推进
-            self.assertIn("rate_limited", state.get("last_error") or "")
+            def _parse(self, html, kw):
+                return []
+
+        with mock.patch.object(job, "CcgpSource", Boom):
+            rc = job.main(["--max-pages", "3"])
+        self.assertEqual(rc, 1)
 
 
 class TestAutoBackfillPass(unittest.TestCase):

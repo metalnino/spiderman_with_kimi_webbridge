@@ -97,7 +97,7 @@ class JsggzySource(BaseSource):
             self.http.sleep()
             if not recs:
                 break
-            if self._page_all_seen(page_notices):
+            if self._page_all_seen(page_notices, page):
                 break
         return out
 

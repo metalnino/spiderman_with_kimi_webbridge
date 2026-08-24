@@ -82,5 +82,5 @@ class YfbzbSource(BaseSource):
                     break
                 yield from items
                 self.http.sleep()
-                if self._page_all_seen(items):
+                if self._page_all_seen(items, page):
                     break

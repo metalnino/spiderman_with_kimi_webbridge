@@ -112,7 +112,6 @@ class CcgpSource(BaseSource):
         env_pages = os.environ.get("SPIDER_CCGP_MAX_PAGES")
         pages_cap = int(env_pages) if env_pages and env_pages.strip().isdigit() else max(6, max_pages)
         self.last_scanned_pages = 0
-        wm = watermark.load(self.source_id)
         collected: list[Notice] = []
         for kw in keywords:
             for page in range(1, pages_cap + 1):
@@ -146,8 +145,8 @@ class CcgpSource(BaseSource):
                 if not items:
                     # 该词无结果或结果尽：不再翻页
                     break
-                if wm and items and all(n.external_id in wm for n in items):
-                    # 水位边界：整页原始已见 → 更深页不再扫（时间倒序排序下更旧）
+                if self._page_all_seen(items, page):
+                    # 水位边界（且历史曾扫得更深）：更深页不再扫
                     break
 
     def _parse(self, html: str, kw: str) -> list[Notice]:

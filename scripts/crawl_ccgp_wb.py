@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import random
 import re
 import sys
@@ -75,7 +76,8 @@ def human_pause(min_s: float = 2.0, max_s: float = 6.0) -> None:
     time.sleep(random.uniform(min_s, max_s))
 
 
-def search_url(kw: str, page: int = 1, time_type: str = "5") -> str:
+def search_url(kw: str, page: int = 1, time_type: str = "5",
+               start_time: str | None = None, end_time: str | None = None) -> str:
     q = urllib.parse.urlencode(
         {
             "searchtype": "1",
@@ -88,6 +90,8 @@ def search_url(kw: str, page: int = 1, time_type: str = "5") -> str:
             "dbselect": "bidx",
             "kw": kw,
             "timeType": time_type,
+            **({"start_time": start_time} if start_time else {}),
+            **({"end_time": end_time} if end_time else {}),
         }
     )
     return f"{SEARCH}?{q}"
@@ -144,10 +148,14 @@ def to_notices(items: list[dict], kw: str, cc: CcgpSource) -> list[Notice]:
     return out
 
 
-def fetch_keyword(kw: str, page: int, cc: CcgpSource) -> tuple[list[Notice], str | None]:
-    """单词单页：频控命中走冷却阶梯重试；仍被拦返回 (partial, error)。"""
+def fetch_keyword(kw: str, page: int, cc: CcgpSource,
+                  start_time: str | None = None, end_time: str | None = None) -> tuple[list[Notice], str | None, list[str]]:
+    """单词单页：频控命中走冷却阶梯重试；仍被拦返回 (partial, error, raw_ids)。
+
+    raw_ids = 该页原始 external_id（未过滤），供水位边界判断（整页已见即停）。
+    """
     ladder, max_retries = cc._block_cfg()
-    url = search_url(kw, page)
+    url = search_url(kw, page, start_time=start_time, end_time=end_time)
     collected: list[Notice] = []
     for attempt in range(max_retries + 1):
         wb.navigate(url, session=SESSION, group_title="ccgp-crawl", new_tab=False)
@@ -155,22 +163,88 @@ def fetch_keyword(kw: str, page: int, cc: CcgpSource) -> tuple[list[Notice], str
         data = extract_results()
         if not data.get("rate_limited"):
             items = data.get("items") or []
+            raw_ids: list[str] = []
+            for it in items:
+                m = re.search(r"t(\d+)_\d+\.htm", it.get("href") or "")
+                raw_ids.append(m.group(1) if m else "")
             print(f"[ccgp-wb] {kw} p{page} -> {len(items)} total={data.get('total')}", flush=True)
-            return to_notices(items, kw, cc), None
+            return to_notices(items, kw, cc), None, raw_ids
         if attempt >= max_retries:
             break
         wait = ladder[min(attempt, len(ladder) - 1)]
         print(f"[ccgp-wb] {kw} 命中频控页，冷却 {wait}s 后重试 ({attempt + 1}/{max_retries + 1})", flush=True)
         time.sleep(wait)
-    return collected, f"ccgp rate_limited（WebBridge 连续 {max_retries + 1} 次被拦）"
+    return collected, f"ccgp rate_limited（WebBridge 连续 {max_retries + 1} 次被拦）", []
 
 
-def main(keywords: list[str] | None = None) -> None:
+def run_window(kws: list[str], start: str, end: str, cc: CcgpSource) -> tuple[int, list[str]]:
+    """P7 回溯：timeType=5（近半年）多页全窗口扫描 + 客户端窗口过滤。
+
+    实测结论：ccgp 自定义时间参数（start_time/end_time 任意格式、任意 timeType）
+    服务端均不生效；但「绿植租摆」近半年窗口总量仅 27 条（2 页）。
+    因此回溯 = 多页扫全窗口 + 客户端按发布窗口过滤（本函数内部），
+    比逐日切片更简单更真实。水位边界整页已见即停；断点=水位本身（重跑幂等）。
+    """
+    from crawl.watermark import get_last_pages, load as wm_load, merge as wm_merge, set_last_pages
+
+    wm = wm_load("ccgp")
+    cap = int(os.environ.get("SPIDER_CCGP_MAX_PAGES") or "6") if os.environ.get("SPIDER_CCGP_MAX_PAGES") else 6
+    kw = kws[0] if kws else "绿植租摆"
+    kept = 0
+    errors: list[str] = []
+    last_page = 0
+    prev_ids: tuple[str, ...] = ()
+    all_raw: list[str] = []
+    for page in range(1, cap + 1):
+        last_page = page
+        print(f"[ccgp-wb-backfill] page={page} ...", flush=True)
+        try:
+            items, err, raw_ids = fetch_keyword(kw, page, cc)
+        except Exception as e:  # noqa: BLE001 —— 失败如实停（重跑幂等，水位不推进）
+            errors.append(f"p{page}: {str(e)[:120]}")
+            break
+        if err:
+            errors.append(f"p{page}: {err[:120]}")
+        if items:
+            stats = upsert_notices(items)
+            kept += len(items)
+            print(f"[ccgp-wb-backfill] p{page} kept={len(items)} (upsert≈{stats['affected']})", flush=True)
+        if not raw_ids:
+            break  # 无结果=结果尽
+        all_raw.extend(raw_ids)
+        if raw_ids and tuple(raw_ids) == prev_ids:
+            break  # 服务端忽略 page_index 重复返回 → 结果尽
+        prev_ids = tuple(raw_ids)
+        # 水位边界：整页已见 **且历史曾扫得更深**（冷启动不提前停）
+        if all(rid in wm for rid in raw_ids) and (get_last_pages("ccgp") or 0) > page:
+            break
+        human_pause(3.0, 8.0)  # 页间随机停顿，防连发限流
+    wm_merge("ccgp", all_raw)  # 原始已见并入水位（0 新增可自证）
+    set_last_pages("ccgp", max(get_last_pages("ccgp") or 0, last_page))  # 深度只增不减
+    return kept, errors
+
+
+def main(keywords: list[str] | None = None,
+         start_time: str | None = None, end_time: str | None = None) -> None:
     kws = keywords or enabled_keywords()
     if not wb.available():
         print(json.dumps({"ok": False, "error": "webbridge_not_available", "hint": "请打开 Kimi 浏览器扩展"}, ensure_ascii=False))
         return
     cc = CcgpSource()
+    if start_time and end_time:
+        run_id = start_run("ccgp")
+        try:
+            kept, errors = run_window(kws, start_time, end_time, cc)
+            status = "success" if not errors else ("partial" if kept else "failed")
+            note = f"ccgp-wb-backfill kept={kept} errors={len(errors)} {'; '.join(errors)[:300]}"
+            if errors:
+                open_todo("ccgp", "source://ccgp", title="ccgp", note="; ".join(errors)[:200])
+            finish_run(run_id, status=status, item_count=kept, note=note)
+            print(json.dumps({"status": status, "kept": kept, "errors": errors[:3]}, ensure_ascii=False))
+        except Exception as e:  # noqa: BLE001
+            finish_run(run_id, status="failed", item_count=0, note=str(e)[:500])
+            print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
+        return
     run_id = start_run("ccgp")
     all_notices: list[Notice] = []
     errors: list[str] = []
@@ -179,7 +253,7 @@ def main(keywords: list[str] | None = None) -> None:
         wb.navigate("https://www.ccgp.gov.cn/", session=SESSION, group_title="ccgp-crawl", new_tab=True)
         human_pause(2.0, 5.0)
         for kw in kws:
-            items, err = fetch_keyword(kw, 1, cc)
+            items, err, _raw = fetch_keyword(kw, 1, cc)
             if items:
                 all_notices.extend(items)
             if err:
@@ -204,6 +278,10 @@ def main(keywords: list[str] | None = None) -> None:
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
     ap.add_argument("--keywords", default="", help="comma keywords; empty=all enabled")
+    ap.add_argument("--start", default=None, help="P7 回溯起始日 YYYY-MM-DD（与 --end 同给时逐日切片）")
+    ap.add_argument("--end", default=None, help="P7 回溯结束日 YYYY-MM-DD")
     args = ap.parse_args()
     kws = [k.strip() for k in args.keywords.split(",") if k.strip()] or None
-    main(kws)
+    if bool(args.start) != bool(args.end):
+        raise SystemExit("--start 与 --end 必须同时提供")
+    main(kws, start_time=args.start, end_time=args.end)

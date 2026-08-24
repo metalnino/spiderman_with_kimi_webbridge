@@ -98,6 +98,8 @@ def run_source(source_id: str, *, keywords: list[str] | None = None, max_pages: 
 
     wm_new, wm_total = wm_mod.merge(source_id, [n.external_id for n in notices if n.external_id])
     scanned_pages = getattr(src, "last_scanned_pages", None)
+    if scanned_pages is not None:
+        wm_mod.set_last_pages(source_id, max(wm_mod.get_last_pages(source_id) or 0, scanned_pages))
     if only_target_cities():
         targets = set(target_city_names())
         notices = [n for n in notices if (n.city or "") in targets]
