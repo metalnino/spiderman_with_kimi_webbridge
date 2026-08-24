@@ -58,6 +58,14 @@
       "办公场所绿化",
       "职场绿植绿化"
     ],
+    "rental": [
+      "植物租赁",
+      "绿化租摆",
+      "绿植摆放",
+      "室内绿植",
+      "绿植服务",
+      "花卉租赁"
+    ],
     "weak_or_noisy": [
       "绿植业务",
       "绿植售卖",
@@ -66,28 +74,44 @@
     ],
     "active": [
       "绿植租摆",
+      "绿植租赁",
+      "植物租赁",
+      "绿化租摆",
+      "绿植摆放",
+      "室内植物租赁",
+      "室内绿植",
+      "绿植服务",
+      "花卉租摆",
+      "花卉租赁",
+      "写字楼绿植",
+      "办公楼绿植",
+      "酒店绿植",
+      "大堂绿植",
       "办公绿化",
       "办公区绿化",
       "办公室绿化",
       "办公场所绿化",
+      "办公楼绿化",
       "职场绿植绿化"
     ],
     "scene_as_tag_only": [
-      "酒店绿植",
       "酒店绿化",
-      "写字楼绿植",
-      "办公楼绿化",
+      "写字楼绿化",
       "售楼处绿植",
       "商业综合体绿化",
       "商业空间绿化",
       "会所绿化",
-      "大堂绿植",
       "屋顶绿化",
       "购物中心绿化",
       "商场绿植"
     ]
   },
   "db_keyword_state": [
+    {
+      "keyword": "写字楼绿植",
+      "enabled": 1,
+      "group_name": "active"
+    },
     {
       "keyword": "办公区绿化",
       "enabled": 1,
@@ -104,7 +128,52 @@
       "group_name": "active"
     },
     {
+      "keyword": "办公楼绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "办公楼绿植",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
       "keyword": "办公绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "大堂绿植",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "室内植物租赁",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "室内绿植",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "植物租赁",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "绿化租摆",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "绿植摆放",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "绿植服务",
       "enabled": 1,
       "group_name": "active"
     },
@@ -114,7 +183,27 @@
       "group_name": "active"
     },
     {
+      "keyword": "绿植租赁",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
       "keyword": "职场绿植绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "花卉租摆",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "花卉租赁",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "酒店绿植",
       "enabled": 1,
       "group_name": "active"
     },
@@ -125,11 +214,6 @@
     },
     {
       "keyword": "园林养护",
-      "enabled": 0,
-      "group_name": "active"
-    },
-    {
-      "keyword": "室内植物租赁",
       "enabled": 0,
       "group_name": "active"
     },
@@ -165,11 +249,6 @@
     },
     {
       "keyword": "绿化管养",
-      "enabled": 0,
-      "group_name": "active"
-    },
-    {
-      "keyword": "花卉租摆",
       "enabled": 0,
       "group_name": "active"
     },
