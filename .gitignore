@@ -36,6 +36,9 @@ data/collector/*.txt
 data/web/webbridge_server.log
 data/web/webbridge_server.pid
 
+# P6 管道交接物（运行时产物，每轮出勤覆写/归档；消费者读磁盘不读 git）
+handoffs/
+
 # 保留目录占位可改用 .gitkeep；当前整目录忽略
 
 downloads/
