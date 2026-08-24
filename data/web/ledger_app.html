@@ -68,7 +68,6 @@ a:hover{text-decoration:underline}
 </nav>
 
 <section id="monitor" class="active">
-  <div style="margin-bottom:12px"><button class="primary" id="crawlNow">▶ 立即爬取一次</button> <span class="hint" id="crawlMsg"></span></div>
   <div class="cards" id="sumCards"></div>
   <h3>最近任务</h3>
   <table><thead><tr><th>ID</th><th>源站</th><th>状态</th><th>条数</th><th>开始</th><th>备注</th></tr></thead>
@@ -487,14 +486,6 @@ document.getElementById('lExport').onclick = () => {
   if (document.getElementById('lTarget').checked) qs.set('target_only','1');
   qs.set('sort', document.getElementById('lSort').value);
   window.open('/api/notices/export?'+qs.toString(), '_blank');
-};
-document.getElementById('crawlNow').onclick = async () => {
-  const msg = document.getElementById('crawlMsg');
-  try {
-    const out = await postJSON('/api/crawl/run', {pages: 1});
-    msg.textContent = out.triggered ? ('已触发爬取 (pid='+out.pid+')，稍后刷新看结果') : (out.error || '未触发');
-    setTimeout(() => loadMonitor().catch(showErr), 3000);
-  } catch (e) { showErr(e); }
 };
 document.getElementById('kwAdd').onclick = async () => {
   const inp = document.getElementById('kwNew'), msg = document.getElementById('kwMsg');
