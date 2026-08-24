@@ -82,7 +82,7 @@
     "id": "qianlima",
     "name": "千里马招标网",
     "enabled": true,
-    "route": "http",
+    "route": "webbridge",
     "params": {
       "list_api": "https://search.qianlima.com/api/v1/website/search"
     },

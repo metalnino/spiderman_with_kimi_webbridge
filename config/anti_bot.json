@@ -90,6 +90,14 @@
       "note": "JSL 两阶段反爬需真浏览器（详见 .cursor/docs/anti_bot_lessons.html）",
       "timeout_sec": 35,
       "retries": 3
+    },
+    "qianlima": {
+      "primary": "webbridge",
+      "list": "webbridge",
+      "detail": "bridge",
+      "note": "搜索 API search.qianlima.com/api/v1/website/search 直调 HTTP 418（站点级反爬，改 UA 无效）；走 WebBridge 页内 fetch 同款接口（scripts/crawl_qianlima_wb.py）；详情 bid-<id>.html 419 反爬→详情走桥",
+      "timeout_sec": 45,
+      "retries": 3
     }
   },
   "escalation": [

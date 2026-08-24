@@ -104,6 +104,42 @@ class TestQianlima(unittest.TestCase):
         self.assertEqual(len(items), 2)
 
 
+class TestQianlimaWebBridge(unittest.TestCase):
+    """qianlima 列表 418→桥路径：新模块解析复用 HTTP 契约 + 路由注册（全离线，不依赖真浏览器）。"""
+
+    def test_parse_payload_reuses_http_contract(self):
+        from scripts.crawl_qianlima_wb import parse_payload
+
+        items = parse_payload(QLM_FIXTURE, "绿植租摆")
+        self.assertEqual(len(items), 2)
+        self.assertEqual(items[0].external_id, "624885808")
+        self.assertEqual(items[0].city, "上海")
+        self.assertEqual(items[0].notice_type, "结果")
+        self.assertEqual(items[0].detail_url, "https://www.qianlima.com/bid-624885808.html")
+        self.assertEqual(items[1].external_id, "624820657")
+        self.assertEqual(items[1].city, "南京")
+
+    def test_build_search_url_matches_http_version(self):
+        from crawl.sources.qianlima import QianlimaSource
+        from scripts.crawl_qianlima_wb import build_search_url
+
+        self.assertEqual(build_search_url("绿植租摆", 2), QianlimaSource()._build_url("绿植租摆", 2))
+
+    def test_fetch_search_js_posts_same_api(self):
+        from scripts.crawl_qianlima_wb import fetch_search_js
+
+        js = fetch_search_js("https://search.qianlima.com/api/v1/website/search?x=1")
+        self.assertIn("method: 'POST'", js)
+        self.assertIn("credentials: 'include'", js)
+        self.assertIn("https://search.qianlima.com/api/v1/website/search?x=1", js)
+
+    def test_browser_route_registered(self):
+        from crawl import collector_employee as ce
+
+        self.assertEqual(ce.BROWSER_ROUTES["qianlima"]["route"], "webbridge")
+        self.assertEqual(ce.BROWSER_ROUTES["qianlima"]["module"], "crawl_qianlima_wb")
+
+
 class TestTgnet(unittest.TestCase):
     def test_parse_items(self):
         from scripts.crawl_tgnet_pw import parse_items
@@ -189,7 +225,7 @@ class TestRouting(unittest.TestCase):
         plats = {e["id"]: e for e in ce.load_platforms()}
         self.assertTrue(plats["yfbzb"]["enabled"])
         self.assertEqual(plats["yfbzb"]["route"], "http")
-        self.assertEqual(plats["qianlima"]["route"], "http")
+        self.assertEqual(plats["qianlima"]["route"], "webbridge")
         self.assertEqual(plats["tgnet"]["route"], "playwright")
         self.assertEqual(plats["rccchina"]["route"], "http")
 

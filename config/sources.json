@@ -70,8 +70,9 @@
     "enabled": true,
     "name": "千里马招标网",
     "list_api": "https://search.qianlima.com/api/v1/website/search",
+    "method": "webbridge",
     "detail": "bridge",
-    "note": "HTTP 一级直通（POST JSON 搜索 API）；详情 bid-<id>.html 419 反爬→详情走桥"
+    "note": "搜索 API 直调 HTTP 418（站点级反爬，改 UA 无效）→ 列表走 WebBridge 页内 fetch 同款接口（scripts/crawl_qianlima_wb.py）；详情 bid-<id>.html 419 反爬→详情走桥"
   },
   "tgnet": {
     "enabled": true,

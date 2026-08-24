@@ -15,6 +15,7 @@ v1.2.0 对齐：summary 由详情抓取填充；tenderFile（附件下载+正文
   - HTTP 平台（ccgp/chinabidding/ggzy/jsggzy）→ crawl.runner.run_source（内核原路径）
   - cebpub → scripts/crawl_cebpub_pw.main（Playwright 无头，performSearchRequest 路径）
   - jiangsu_zhaobiao → scripts/crawl_jiangsu_wb.main（WebBridge 真浏览器，JSL 两阶段路径）
+  - qianlima → scripts/crawl_qianlima_wb.main（WebBridge 真浏览器，页内 fetch 搜索 API 过 418）
 路由表见 BROWSER_ROUTES（与 config/platforms.json 的 route 字段一致）。
 详情/附件抓取（tenderFile）：crawl.tenderfile.fetch_tenderfile，HTTP 详情源站已接入，
 浏览器路由源站（cebpub/jiangsu_zhaobiao）详情需真浏览器会话、未接入，如实输出 null。
@@ -85,6 +86,7 @@ BROWSER_ROUTES = {
     "cebpub": {"route": "playwright", "module": "crawl_cebpub_pw"},
     "jiangsu_zhaobiao": {"route": "webbridge", "module": "crawl_jiangsu_wb"},
     "tgnet": {"route": "playwright", "module": "crawl_tgnet_pw"},
+    "qianlima": {"route": "webbridge", "module": "crawl_qianlima_wb"},
 }
 
 
