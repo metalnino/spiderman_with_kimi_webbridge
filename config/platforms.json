@@ -67,5 +67,45 @@
       "search_api": "https://jiangsu.zhaobiao.cn/psearch/Dqsearch"
     },
     "proxy": null
+  },
+  {
+    "id": "yfbzb",
+    "name": "乙方宝",
+    "enabled": true,
+    "route": "http",
+    "params": {
+      "list_url": "https://www.yfbzb.com/search/invitedBidSearch"
+    },
+    "proxy": null
+  },
+  {
+    "id": "qianlima",
+    "name": "千里马招标网",
+    "enabled": true,
+    "route": "http",
+    "params": {
+      "list_api": "https://search.qianlima.com/api/v1/website/search"
+    },
+    "proxy": null
+  },
+  {
+    "id": "tgnet",
+    "name": "工程帮(天工网)",
+    "enabled": true,
+    "route": "playwright",
+    "params": {
+      "search": "https://search.tgnet.com/ProjectSearch.aspx"
+    },
+    "proxy": null
+  },
+  {
+    "id": "rccchina",
+    "name": "瑞达恒(标慧帮)",
+    "enabled": true,
+    "route": "http",
+    "params": {
+      "home": "http://www.rccchina.com/"
+    },
+    "proxy": null
   }
 ]

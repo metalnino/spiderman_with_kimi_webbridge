@@ -83,6 +83,7 @@ _BLOCK_MARKERS = ("http 403", "rate_limited", "频繁", "频控", "封禁", "blo
 BROWSER_ROUTES = {
     "cebpub": {"route": "playwright", "module": "crawl_cebpub_pw"},
     "jiangsu_zhaobiao": {"route": "webbridge", "module": "crawl_jiangsu_wb"},
+    "tgnet": {"route": "playwright", "module": "crawl_tgnet_pw"},
 }
 
 

@@ -4,6 +4,10 @@ from crawl.sources.ccgp import CcgpSource
 from crawl.sources.ggzy import GgzySource
 from crawl.sources.jsggzy import JsggzySource
 from crawl.sources.jiangsu_zhaobiao import JiangsuZhaobiaoSource
+from crawl.sources.qianlima import QianlimaSource
+from crawl.sources.rccchina import RccchinaSource
+from crawl.sources.tgnet import TgnetSource
+from crawl.sources.yfbzb import YfbzbSource
 
 REGISTRY = {
     "cebpub": CebpubSource,
@@ -12,10 +16,17 @@ REGISTRY = {
     "ccgp": CcgpSource,
     "jsggzy": JsggzySource,
     "jiangsu_zhaobiao": JiangsuZhaobiaoSource,
+    "yfbzb": YfbzbSource,
+    "qianlima": QianlimaSource,
+    "tgnet": TgnetSource,
+    "rccchina": RccchinaSource,
 }
 
 # 源站稳定顺序；是否启用由 config/sources.json 的 enabled 控制（ggzy/jsggzy 默认 disabled）
-SOURCE_ORDER = ["cebpub", "chinabidding", "ccgp", "ggzy", "jsggzy", "jiangsu_zhaobiao"]
+SOURCE_ORDER = [
+    "cebpub", "chinabidding", "ccgp", "ggzy", "jsggzy", "jiangsu_zhaobiao",
+    "yfbzb", "qianlima", "tgnet", "rccchina",
+]
 
 
 def enabled_source_ids() -> list[str]:

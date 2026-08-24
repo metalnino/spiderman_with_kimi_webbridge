@@ -58,5 +58,32 @@
     "search_api": "https://jiangsu.zhaobiao.cn/psearch/Dqsearch",
     "method": "webbridge",
     "note": "JSL 两阶段反爬(521)，纯HTTP/无头浏览器均过不去；走本机 WebBridge 真浏览器 scripts/crawl_jiangsu_wb.py"
+  },
+  "yfbzb": {
+    "enabled": true,
+    "name": "乙方宝",
+    "list_url": "https://www.yfbzb.com/search/invitedBidSearch",
+    "detail": "http",
+    "note": "HTTP 一级直通（搜索 table#treeTable + 详情正文）；m.yfbzb.com 403 拦 IP，用 www 域"
+  },
+  "qianlima": {
+    "enabled": true,
+    "name": "千里马招标网",
+    "list_api": "https://search.qianlima.com/api/v1/website/search",
+    "detail": "bridge",
+    "note": "HTTP 一级直通（POST JSON 搜索 API）；详情 bid-<id>.html 419 反爬→详情走桥"
+  },
+  "tgnet": {
+    "enabled": true,
+    "name": "工程帮(天工网)",
+    "search": "https://search.tgnet.com/ProjectSearch.aspx",
+    "method": "playwright",
+    "note": "二级 Playwright：搜索 aspx 结果为 JS 加载；数据为工程项目信息(含阶段列)，如实入库"
+  },
+  "rccchina": {
+    "enabled": true,
+    "name": "瑞达恒(标慧帮)",
+    "home": "http://www.rccchina.com/",
+    "note": "注册墙（手机号+短信验证码），三级均不可直取；占位源如实报 register_wall + 登记待办，待账号"
   }
 }

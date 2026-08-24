@@ -51,6 +51,10 @@ DETAIL_MODES = {
     "chinabidding": "bridge",
     "jiangsu_zhaobiao": "bridge",
     "cebpub": "bridge_vaptcha",  # vaptcha 人工一次后桥内附件可下（接口 DES 解密已实现）
+    "yfbzb": "http",
+    "qianlima": "bridge",  # 详情 bid-<id>.html 419 反爬，桥渲染
+    "tgnet": "bridge",  # 项目详情页桥渲染
+    "rccchina": "blocked_regwall",  # 注册墙（手机号+短信验证码），三级不可直取
 }
 
 # 兼容旧引用（外壳 _enrich_tenderfiles 曾按此判断 HTTP 详情源站）
@@ -1111,8 +1115,11 @@ def fetch_tenderfile(source_id: str, detail_url: str, *, http: HttpSession | Non
         return fetch_detail_via_bridge(source_id, detail_url)
     if mode == "bridge_vaptcha":
         return fetch_cebpub_via_bridge(detail_url)
+    if mode == "blocked_regwall":
+        out["error"] = "detail_register_wall"  # 注册墙（手机号+短信验证码），三级不可直取，待账号
+        return out
 
-    # mode == "http"（ccgp 等）
+    # mode == "http"（ccgp / yfbzb 等）
     http = http or HttpSession(source_id)
     try:
         html = http.get_text(detail_url, headers={"Referer": detail_url})
