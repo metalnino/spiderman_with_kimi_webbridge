@@ -1,9 +1,22 @@
 # 交付报告 · 招标采集员员工（implements: collector/v1.2.0）
 
 > 岗位：爬虫工作区「能力工位」 ｜ 依据：contracts/collector/v1.2.0.json（总设计师工作区）+ 开发指导/补充规范/员工模板规范
-> 交付日期：2026-08-22（v3.4：DeepSeek 多模态验证码打通；v3.5：完成度审计与收口）
+> 交付日期：2026-08-24（v3.4：DeepSeek 多模态验证码打通；v3.5：完成度审计与收口；v3.6：新增四站）
 > 内核类型：rule ｜ 自主性预算：deterministic
-> 历史：v1~v3.4 → v3.5（本文档：六站全链路收口 + 完成度矩阵）
+> 历史：v1~v3.5 → v3.6（本文档：新增四站 乙方宝/千里马/工程帮/瑞达恒）
+
+## 0. v3.6 增补（2026-08-24）：新增四站（分支开发→合并 main）
+
+按用户要求新增 4 站，独立分支 feature/new-sites-4 开发、合并 main，未动既有六站任何控制流。每站按既有三级流程探路落位（上一级走不通落下一级）：
+
+| 站点 | 落位 | 依据与现状 |
+|---|---|---|
+| 乙方宝 yfbzb | **HTTP ①** | 搜索 `search/invitedBidSearch?keyword=&pageNo=` 直通（table#treeTable：标题/类型/地区/时间），详情 `/inviteBid/detail/<id>.html` 正文可抓；m 域 403 拦 IP 走 www |
+| 千里马 qianlima | **HTTP ①** | POST `search.qianlima.com/api/v1/website/search` JSON 直调（2812 命中/141 页）；详情 `bid-<id>.html` 419 反爬 → 详情走桥（②③备用） |
+| 工程帮(天工网) tgnet | **Playwright ②** | HTTP aspx 结果由 JS 加载、bid.tgnet.com SSL 不通（①失败）→ Playwright 渲染 search.tgnet.com 取项目列表（阶段/更新时间/链接）；数据为工程项目信息，如实标 notice_type |
+| 瑞达恒(标慧帮) rccchina | **注册墙**（③也过不去） | 三级探路均到注册墙（手机号+短信验证码）；占位源如实报 `register_wall` + 登记待办，**待账号/验证码就位后按 HTTP 源结构补 fetch** |
+
+接入：SOURCE_REGISTRY + config/sources.json + config/platforms.json + BROWSER_ROUTES(tgnet=playwright) + DETAIL_MODES(yfbzb=http/qianlima=bridge/tgnet=bridge/rccchina=blocked_regwall)。测试 tests/test_new_sites.py 11 用例（解析/流/路由/注册墙诚实性）；真机烟测 fetched=21（yfbzb 9 + qianlima 2 + tgnet 10，8 城+日期过滤后如实入库 21 新增），rccchina 如实失败并留待办；全量回归 120 通过。
 
 ## 0. v3.5 增补（2026-08-22）：完成度审计收口
 
