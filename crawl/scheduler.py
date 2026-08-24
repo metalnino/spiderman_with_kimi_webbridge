@@ -27,9 +27,11 @@ def _now() -> datetime:
 
 
 def parse_slots(raw: str | None) -> list[tuple[int, int]]:
-    """Parse '8,12,18,22' or '8:00,12:00' → [(h,m), ...]."""
+    """Parse '8,12,18,22' or '8:00,12:00' → [(h,m), ...]；'off'/'none'/'disabled' → []（关闭调度）。"""
     if not raw or not str(raw).strip():
         return list(DEFAULT_SLOTS)
+    if str(raw).strip().lower() in ("off", "none", "disabled"):
+        return []
     out: list[tuple[int, int]] = []
     for part in str(raw).split(","):
         part = part.strip()

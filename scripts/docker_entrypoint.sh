@@ -20,6 +20,11 @@ if [ "${CRAWL_ON_START:-0}" = "1" ]; then
 fi
 
 SLOTS="${CRAWL_CRON_HOURS:-8,12,18,22}"
+if [ "$SLOTS" = "off" ]; then
+  echo "[entry] crawl disabled (CRAWL_CRON_HOURS=off) — ledger only (pid=${LEDGER_PID})"
+  # 注意：不能用 exec sh -c "wait"（新 shell 不认子进程 pid，退出码 127 会引发重启循环）
+  wait "$LEDGER_PID"
+fi
 echo "[entry] scheduler cron hours=${SLOTS} TZ=${TZ} (ledger pid=${LEDGER_PID})"
 exec python -c "
 from crawl.scheduler import start_cron_loop, parse_slots

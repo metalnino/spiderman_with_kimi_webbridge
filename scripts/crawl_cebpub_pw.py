@@ -25,7 +25,11 @@ EXTRACT_JS = r"""() => {
   const out = [];
   document.querySelectorAll("a[onclick*='showDetails']").forEach(a => {
     const row = a.closest("tr") || a.parentElement;
-    out.push({title: (a.textContent || "").replace(/\s+/g, " ").trim(), row: (row && row.innerText || "").replace(/\s+/g, " ")});
+    const on = a.getAttribute("onclick") || "";
+    // showDetails(...,"<32位uuid>")：末段 32 位 hex 即 SPA 详情 uuid（ctbpsp.com/#/bulletinDetail）
+    const m = on.match(/([0-9a-fA-F]{32})/g);
+    const uuid = m ? m[m.length - 1] : "";
+    out.push({title: (a.textContent || "").replace(/\s+/g, " ").trim(), row: (row && row.innerText || "").replace(/\s+/g, " "), uuid});
   });
   return out;
 }"""
@@ -72,7 +76,13 @@ def extract_results(page) -> list[dict]:
         if eid in seen:
             continue
         seen.add(eid)
-        items.append({"external_id": eid, "title": title, "publish_date": pub, "city": city, "region_text": region})
+        uuid = (it.get("uuid") or "").strip()
+        detail_url = (
+            f"https://ctbpsp.com/#/bulletinDetail?uuid={uuid}&inpvalue=&dataSource=0&tenderAgency="
+            if uuid else None
+        )
+        items.append({"external_id": eid, "title": title, "publish_date": pub, "city": city,
+                      "region_text": region, "detail_url": detail_url, "official_url": detail_url})
     return items
 
 
@@ -123,6 +133,8 @@ def main(keywords: list[str] | None = None) -> dict:
                             region_text=it["region_text"],
                             keyword=kw,
                             bid_status="未知",
+                            detail_url=it.get("detail_url"),
+                            official_url=it.get("official_url"),
                         )
                     )
                 page.wait_for_timeout(1500)

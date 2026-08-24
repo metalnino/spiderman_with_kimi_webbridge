@@ -27,6 +27,9 @@ data/web/zhaobiao_*
 # 人工划码回灌的 Cookie（勿提交）
 data/sessions/
 
+# OCR API 密钥（勿提交）
+config/ocr_api.json
+
 # 员工采集员运行时产物（每次运行覆写，不入库）
 reports/
 data/collector/*.txt
@@ -34,3 +37,5 @@ data/web/webbridge_server.log
 data/web/webbridge_server.pid
 
 # 保留目录占位可改用 .gitkeep；当前整目录忽略
+
+downloads/
