@@ -95,7 +95,8 @@
       "primary": "webbridge",
       "list": "webbridge",
       "detail": "bridge",
-      "note": "搜索 API search.qianlima.com/api/v1/website/search 直调 HTTP 418（站点级反爬，改 UA 无效）；走 WebBridge 页内 fetch 同款接口（scripts/crawl_qianlima_wb.py）；详情 bid-<id>.html 419 反爬→详情走桥",
+      "on_waf_418": "stop_keyword_backoff",
+      "note": "2026-08-25 实网探针（data/qianlima_ui_probe.json）：真人浏览器开官网/搜索页均正常、WAF cookie 已下发，但站点自己前端发的全部 /api/v1/* 请求同样 418（含其自带 3 次降级重试）——IP/设备级硬拦截，非模拟不足。桥路由（scripts/crawl_qianlima_wb.py）遇 418 只探 1 词即停手，解封后自动恢复；详情 bid-<id>.html 419 反爬→详情走桥",
       "timeout_sec": 45,
       "retries": 3
     }

@@ -28,6 +28,15 @@ from crawl.sources.qianlima import QianlimaSource  # noqa: E402
 HOME = "https://search.qianlima.com/"
 SESSION = "qianlima-crawl"
 
+# 站点级 WAF 硬拦截特征（2026-08-25 实网探针：真人浏览器 + 站内 SPA 自身请求同样 418，
+# 属 IP/设备风控而非模拟不足；命中即停手，不轰炸剩余词）
+WAF_BLOCK_MARKERS = ("418", "疑似恶意攻击", "cloudwaf")
+
+
+def _is_waf_block(err: str) -> bool:
+    s = (err or "").lower()
+    return any(m in s for m in ("418", "疑似恶意攻击", "cloudwaf"))
+
 
 def build_search_url(kw: str, page: int = 1) -> str:
     """与 HTTP 版 QianlimaSource._build_url 完全一致（同款搜索 API）。"""
@@ -177,6 +186,14 @@ def main(keywords: list[str] | None = None) -> dict:
                 if first_err is None:
                     first_err = f"qianlima search failed: {str(e)[:200]}"
                 print(f"[qianlima-wb] {kw} error: {e}", flush=True)
+                if _is_waf_block(str(e)):
+                    # 站点级 418 硬拦截：立即停手，剩余词不再打（频控靠冷却阶梯不靠轰炸）；
+                    # 下轮调度仍会探 1 词做自愈探测，解封即恢复产出。
+                    first_err = (
+                        f"qianlima waf_block(418 site-level, stopped after {i + 1}/{len(kws)} words): "
+                        f"{str(e)[:160]}"
+                    )
+                    break
 
         kept, dropped = _filter_notices(all_notices)
         stats = upsert_notices(kept)

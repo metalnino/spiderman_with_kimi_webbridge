@@ -139,6 +139,35 @@ class TestQianlimaWebBridge(unittest.TestCase):
         self.assertEqual(ce.BROWSER_ROUTES["qianlima"]["route"], "webbridge")
         self.assertEqual(ce.BROWSER_ROUTES["qianlima"]["module"], "crawl_qianlima_wb")
 
+    def test_waf_418_stops_early(self):
+        """站点级 418 硬拦截 → 只探 1 词立即停手（不轰炸剩余词），status=failed 且 err 自证。"""
+        from scripts import crawl_qianlima_wb as qlm
+
+        calls = {"evaluate": 0, "navigate": 0}
+
+        def fake_eval(code, *, session):
+            calls["evaluate"] += 1
+            return {"ok": True, "data": {"value": json.dumps(
+                {"status": 418, "text": "系统检测到疑似恶意攻击行为"}
+            )}}
+
+        def fake_nav(url, *, session, group_title=None, new_tab=True):
+            calls["navigate"] += 1
+            return {"ok": True}
+
+        with mock.patch.object(qlm.wb, "available", return_value=True), \
+             mock.patch.object(qlm.wb, "evaluate", side_effect=fake_eval), \
+             mock.patch.object(qlm.wb, "navigate", side_effect=fake_nav), \
+             mock.patch.object(qlm, "start_run", return_value=9999), \
+             mock.patch.object(qlm, "finish_run"), \
+             mock.patch.object(qlm, "upsert_notices", return_value={"affected": 0, "attempted": 0}):
+            res = qlm.main(["词A", "词B", "词C"])
+
+        self.assertEqual(res["status"], "failed")
+        self.assertIn("waf_block", res["error"])
+        self.assertEqual(calls["navigate"], 1)   # 只探 1 词即停
+        self.assertEqual(calls["evaluate"], 1)
+
 
 class TestTgnet(unittest.TestCase):
     def test_parse_items(self):

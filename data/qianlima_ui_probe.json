@@ -1,0 +1,116 @@
+{
+  "kw": "绿植租摆",
+  "steps": [
+    {
+      "step": "home_nav",
+      "ok": true,
+      "err": null
+    },
+    {
+      "step": "network_start",
+      "ok": true,
+      "err": null
+    },
+    {
+      "step": "search_nav",
+      "ok": false,
+      "err": {
+        "code": "tool_error",
+        "message": "navigate: page load timeout (30s)"
+      }
+    }
+  ],
+  "bridge": {
+    "up": true,
+    "extensions": 1
+  },
+  "home_cookies": {
+    "ok": true,
+    "names": [
+      "preurl",
+      "Hm_lvt_5dc1b78c0ab996bd6536c3a37f9ceda7",
+      "seo_refUrl",
+      "HWWAFSESTIME",
+      "seo_curUrl",
+      "HMACCOUNT",
+      "qlm_referrer",
+      "Hm_lpvt_6c005568778ffc10268e97cede6945b0",
+      "Hm_lpvt_c97e6e2b299b38ca83a3684cd8ba1876",
+      "guest_id",
+      "WAFSESSCC_TAG",
+      "login_open",
+      "Hm_lvt_c97e6e2b299b38ca83a3684cd8ba1876",
+      "HWWAFSESID",
+      "qlm_visitor_id",
+      "Hm_lvt_6c005568778ffc10268e97cede6945b0",
+      "Hm_lpvt_5dc1b78c0ab996bd6536c3a37f9ceda7",
+      "captcha_rand_code",
+      "first_login_open",
+      "cloudwaf_baseurl"
+    ]
+  },
+  "page": {
+    "title": "招标信息查询-招标信息平台-千里马招标网",
+    "url": "https://search.qianlima.com/?q=%E7%BB%BF%E6%A4%8D%E7%A7%9F%E6%91%86#/search",
+    "tree_head": "[{\"role\": \"button\", \"ref\": \"@e1\"}, [[{\"role\": \"paragraph\", \"children\": [{\"role\": \"StaticText\", \"name\": \"您好，欢迎您来到千里马招标网\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"您好，欢迎您来到千里马招标网\"}]}, {\"role\": \"StaticText\", \"name\": \"   \", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"   \"}]}, {\"role\": \"link\", \"name\": \"登录\", \"ref\": \"@e2\", \"children\": [{\"role\": \"StaticText\", \"name\": \"登录\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"登录\"}]}]}, {\"role\": \"StaticText\", \"name\": \" | \", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \" | \"}]}, {\"role\": \"link\", \"name\": \"注册\", \"ref\": \"@e3\", \"children\": [{\"role\": \"StaticText\", \"name\": \"注册\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"注册\"}]}]}, {\"role\": \"StaticText\", \"name\": \"   [\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"   [\"}]}, {\"role\": \"link\", \"name\": \"资费标准\", \"ref\": \"@e4\", \"children\": [{\"role\": \"StaticText\", \"name\": \"资费标准\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"资费标准\"}]}]}, {\"role\": \"StaticText\", \"name\": \"]   [\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"]   [\"}]}, {\"role\": \"link\", \"name\": \"付款方式\", \"ref\": \"@e5\", \"children\": [{\"role\": \"StaticText\", \"name\": \"付款方式\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"付款方式\"}]}]}, {\"role\": \"StaticText\", \"name\": \"]\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"]\"}]}]}, [{\"role\": \"StaticText\", \"name\": \"地区分站\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"地区分站\"}]}, {\"role\": \"link\", \"name\": \"定制版登录\", \"ref\": \"@e6\", \"children\": [{\"role\": \"StaticText\", \"name\": \"定制版登录\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"定制版登录\"}]}]}]], [{\"role\": \"banner\", \"children\": [[{\"role\": \"LayoutTable\", \"children\": [{\"role\": \"textbox\", \"name\": \"请输入您要搜索的内容\", \"value\": \"绿植租摆\", \"ref\": \"@e7\", \"children\": [{\"role\": \"StaticText\", \"name\": \"绿植租摆\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"绿植租摆\"}]}]}, {\"role\": \"button\", \"name\": \"搜 索\", \"ref\": \"@e8\", \"children\": [{\"role\": \"StaticText\", \"name\": \"搜 索\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"搜 索\"}]}]}]}, [[{\"role\": \"link\", \"name\": \"官方标书代写｜1对1专家服务\", \"ref\": \"@e9\", \"children\": [{\"role\": \"StaticText\", \"name\": \"官方标书代写｜1对1专家服务\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"官方标书代写｜1对1专家服务\"}]}]}, {\"role\": \"link\", \"name\": \"喜鹊标书AI｜AI投标助手\", \"ref\": \"@e10\", \"children\": [{\"role\": \"StaticText\", \"name\": \"喜鹊标书AI｜AI投标助手\", \"children\": [{\"role\": \"InlineTextBox\", \"name\": \"喜鹊标书AI｜AI投标助手\"}]}]}], {\"role\": \"link\", \"name\": \"进入高级检索>>\", \"ref\": \"@e11\", \"children\": [{\"role\": \"StaticText\", \"name\": \"进入高级检索>>\", \"children\": [{\"role\": \"InlineTextBox\", \"nam"
+  },
+  "page1": {
+    "href": "https://search.qianlima.com/?q=%E7%BB%BF%E6%A4%8D%E7%A7%9F%E6%91%86#/search",
+    "title": "招标信息查询-招标信息平台-千里马招标网",
+    "rows": [
+      {
+        "t": "【招标历史数据库】查看往年历史数据>>",
+        "h": "https://center.qianlima.com/zb_db_library.jsp"
+      }
+    ],
+    "textHead": "您好，欢迎您来到千里马招标网 登录 | 注册 [资费标准] [付款方式] 地区分站定制版登录 搜 索 官方标书代写｜1对1专家服务 喜鹊标书AI｜AI投标助手 进入高级检索>> 中华人民共和国发改委 中华人民共和国建设部 中华人民共和国财政部 中华人民共和国商务部 当前位置：首页搜索如何搜索 选择地区: 全国安徽北京福建甘肃广东广西贵州海南河北河南黑龙江湖北湖南吉林江苏江西辽宁内蒙古宁夏青海山东山西陕西上海四川天津西藏新疆云南浙江重庆说明：地区按拼音A-Z排序 信息类型: 全部公告预告变更中标国土其他审批项目拟在建项目VIP项目 选择时间: 近一周近一个月近三个月近半年近一年自定义 搜索方式: 全文标题 搜索模式: 智能模糊精准 已选条件: 近一年模糊清空已选条件 搜 索 抱歉，近一年暂未找到您想要的招标采购信息， 可前往【招标历史数据库】查看往年历史数据>> 您可以尝试以下操作： ·重新输入关键字：在关键字查询框中允许单个词或多个词查询，多关键词之间用空格隔开， 如:“景观 喷泉”；用“+”隔开，会更准确，如：“景观+喷泉”； ·确认关键词无误：请选用合理准确的行业关键词，尽量简洁。请使用相近的关键词搜索； ·也可直接搜公司名：输入公司名称，从搜索结果中选择。 ·可以致电千里马客服寻求帮助 400-688-2000 重点项目查询 发布招标信息 最新招标查询 招标机构查询 项目动态追踪 行业研究报告 立即注册 已有账号，登录 优秀供应商 会员中标榜 千里马友情提示: 1、招标编号可能不同阶段会变化，比如公告阶段的编号为20100525，但中标阶段编号可能为20100622。 2、招标单位名称有简称和全称之分，您搜索时可以适当调整。 重新搜索： 搜 索 搜索功能给力吗？ 美观度 信息质量 信息准确 提 交 招投标方面您重点关注哪些信息？ 投标报价 企业资质 投标资料 评标办法 项目评估 项目价款 所在地区 行业动态 其他 提 交 您有什么好的建议和想法？ 提 交 咨询热线 售前咨询 售后服务 千里马首页关于我们联系我们成功案例会员服务付款方式广告服务招标法规网站声明友情链接网站地图收藏本站 ©版权所有 2008-2026 千里马招标网 www.qianlima.com 京ICP证160587号 京ICP备16007318号 京公网安备 11010802022728号 *手机号 *验证码 获取验证码 我已阅读并同意《千里马用户协议》 提交注册 已注册,去登录",
+    "cookie": "qlm_visitor_id=549915520; Hm_lvt_5dc1b78c0ab996bd6536c3a37f9ceda7=1787573223; HMACCOUNT=46A75239ABB8E789; guest_id=51aa64f0-eeea-4b76-8792-7d9dc51464f4; HWWAFSESID=7983c76a3694e5dca1; HWWAFSESTIME=1787596837299; first_login_open=1; seo_refUrl=; seo_curUrl=www.qianlima.com; qlm_referrer=; Hm_lpvt_5dc"
+  },
+  "api_requests": [
+    {
+      "method": "GET",
+      "status": 200,
+      "url": "https://search.qianlima.com/?q=%E7%BB%BF%E6%A4%8D%E7%A7%9F%E6%91%86"
+    },
+    {
+      "method": "GET",
+      "status": 418,
+      "url": "https://search.qianlima.com/undefined"
+    },
+    {
+      "method": "GET",
+      "status": 418,
+      "url": "https://search.qianlima.com/undefined"
+    },
+    {
+      "method": "GET",
+      "status": 418,
+      "url": "https://search.qianlima.com/api/v1/website/provider"
+    },
+    {
+      "method": "GET",
+      "status": 418,
+      "url": "https://search.qianlima.com/api/v1/website/bid"
+    },
+    {
+      "method": "POST",
+      "status": 418,
+      "url": "https://search.qianlima.com/api/v1/website/search?filtermode=1&timeType=101&areas=&types=-1&searchMode=0&keywords=%E7%BB%BF%E6%A4%8D%E7%A7%9F%E6%91%86&beginTime=&endTime=&isfirst=true&currentPage=1&numPerPage=20"
+    },
+    {
+      "method": "POST",
+      "status": 418,
+      "url": "https://search.qianlima.com/api/v1/website/picture?keyword=%E7%BB%BF%E6%A4%8D%E7%A7%9F%E6%91%86&type=2"
+    },
+    {
+      "method": "POST",
+      "status": 418,
+      "url": "https://search.qianlima.com/api/v1/website/search?filtermode=1&timeType=102&areas=&types=-1&searchMode=0&keywords=%E7%BB%BF%E6%A4%8D%E7%A7%9F%E6%91%86&beginTime=&endTime=&isfirst=true&currentPage=1&numPerPage=20"
+    },
+    {
+      "method": "POST",
+      "status": 418,
+      "url": "https://search.qianlima.com/api/v1/website/search?filtermode=1&timeType=1&areas=&types=-1&searchMode=0&keywords=%E7%BB%BF%E6%A4%8D%E7%A7%9F%E6%91%86&beginTime=&endTime=&isfirst=true&currentPage=1&numPerPage=20"
+    }
+  ]
+}
