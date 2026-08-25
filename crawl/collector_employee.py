@@ -525,6 +525,7 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
     success_rate: dict[str, float] = {}
     empty_platforms: list[str] = []
     collected: list = []
+    new_notices: list[dict] = []  # 本轮去重后真正新增的原始通知（供完成钩子/简报邮件用）
 
     for pid in run_list:
         existing = _existing_hashes(pid)
@@ -546,6 +547,8 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
             if h not in existing:
                 new_hashes += 1
                 existing.add(h)
+                if isinstance(n, dict):
+                    new_notices.append(n)
         dedup_new_total += new_hashes
         status = str(res.get("status") or "error")
         success_rate[pid] = 0.0 if status in ("failed", "error") else 1.0
@@ -695,4 +698,4 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
     except OSError:
         pass  # 归档失败不影响本轮主报告与产出
 
-    return {"output": output, "report": report, "reportPath": str(report_path)}
+    return {"output": output, "report": report, "reportPath": str(report_path), "newNotices": new_notices}

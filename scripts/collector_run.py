@@ -31,6 +31,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from crawl.collector_employee import IMPLEMENTS, IDENTITY, ContractInputError, run  # noqa: E402
+from crawl import mail_report  # noqa: E402
 
 HANDOFF_DIR = Path(os.environ.get("SPIDER_HANDOFF_DIR") or (ROOT / "handoffs" / "collector"))
 
@@ -100,6 +101,15 @@ def main() -> int:
         ensure_ascii=False,
         indent=2,
     ))
+
+    # 完成钩子：任务跑完自动给 QQ 邮箱发增量简报（HTML）。SPIDER_NO_EMAIL=1 关闭；失败只记录不挡主流程。
+    mail_result = {"ok": False, "error": "skipped"}
+    try:
+        mail_result = mail_report.send_from_collector(result["report"], result.get("newNotices") or [])
+    except Exception as e:  # noqa: BLE001
+        mail_result = {"ok": False, "error": f"{type(e).__name__}: {e}"}
+    print("[mail]", json.dumps(mail_result, ensure_ascii=False), flush=True)
+
     return 0
 
 

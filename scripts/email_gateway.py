@@ -121,8 +121,9 @@ class _TunneledIMAP4_SSL(imaplib.IMAP4_SSL):
         return ctx.wrap_socket(raw, server_hostname=self.host)
 
 
-def _smpt_attempt(host: str, port: int, user: str, app_pw: str, msg) -> tuple[bool, str]:
-    use_tunnel = port == 465 and bool(proxy())
+def _smpt_attempt(host: str, port: int, user: str, app_pw: str, msg, use_tunnel: bool | None = None) -> tuple[bool, str]:
+    if use_tunnel is None:
+        use_tunnel = port == 465 and bool(proxy())
     cls = _TunneledSMTP_SSL if use_tunnel else smtplib.SMTP_SSL
     with cls(host, port, timeout=30) as s:
         s.login(user, app_pw)
@@ -130,29 +131,67 @@ def _smpt_attempt(host: str, port: int, user: str, app_pw: str, msg) -> tuple[bo
     return True, f"{host}:{port}" + ("(proxy)" if use_tunnel else "")
 
 
-def send(to: str, subject: str, body_text: str) -> dict:
-    """SMTP 发信（465 直连→465 走代理→587 回退）。返回 {ok, host|error}。"""
-    p = provider()
-    ep = _endpoints(p)
-    user, app_pw = qq_creds() if p == "qq" else creds()
-    if not user or not app_pw:
-        key = "EMAIL_USER/EMAIL_PASSWORD(QQ 授权码)" if p == "qq" else "GMAIL_USER/GMAIL_APP_PASSWORD"
-        return {"ok": False, "error": f"no_credentials: .env 缺 {key}"}
+def _resolve_sender(p: str) -> tuple[tuple[str, str], str]:
+    """发件凭据 + 缺凭据时的提示 key（.env 里应填哪个）。"""
+    if p == "qq":
+        return qq_creds(), "EMAIL_USER/EMAIL_PASSWORD(QQ 授权码)"
+    return creds(), "GMAIL_USER/GMAIL_APP_PASSWORD"
+
+
+def _build_message(user: str, to: str, subject: str, body_text: str | None, body_html: str | None):
+    """构造邮件：纯文本 / HTML / 两者兼有（multipart/alternative）。"""
     msg = email.message.EmailMessage()
     msg["From"] = user
     msg["To"] = to
     msg["Subject"] = subject
-    msg.set_content(body_text)
-    attempts = [(ep["smtp_host"], ep["smtp_port"])]
+    if body_html:
+        if body_text:
+            msg.set_content(body_text)
+            msg.add_alternative(body_html, subtype="html")
+        else:
+            msg.set_content(body_html, subtype="html")
+    else:
+        msg.set_content(body_text or "")
+    return msg
+
+
+def _send_message(user: str, app_pw: str, ep: dict, msg) -> dict:
+    """SMTP 发信：有代理先走代理隧道，失败回退直连。返回 {ok, host|error}。"""
+    host, port = ep["smtp_host"], ep["smtp_port"]
+    attempts: list[tuple[str, int, bool]] = []
+    if proxy():
+        attempts.append((host, port, True))  # 代理 CONNECT 隧道
+    attempts.append((host, port, False))  # 直连兜底
     last = ""
-    for host, port in attempts:
+    for h, p, use_tunnel in attempts:
         try:
-            ok, label = _smpt_attempt(host, port, user, app_pw, msg)
+            ok, label = _smpt_attempt(h, p, user, app_pw, msg, use_tunnel=use_tunnel)
             if ok:
                 return {"ok": True, "host": label}
         except Exception as e:  # noqa: BLE001
             last = str(e)[:200]
     return {"ok": False, "error": last}
+
+
+def send_mime(to: str, subject: str, *, body_text: str | None = None, body_html: str | None = None) -> dict:
+    """发信通用入口：body_text / body_html 至少其一。返回 {ok, host|error}。"""
+    p = provider()
+    ep = _endpoints(p)
+    (user, app_pw), key = _resolve_sender(p)
+    if not user or not app_pw:
+        return {"ok": False, "error": f"no_credentials: .env 缺 {key}"}
+    msg = _build_message(user, to, subject, body_text, body_html)
+    return _send_message(user, app_pw, ep, msg)
+
+
+def send(to: str, subject: str, body_text: str) -> dict:
+    """纯文本发信（兼容旧接口）。返回 {ok, host|error}。"""
+    return send_mime(to, subject, body_text=body_text)
+
+
+def send_html(to: str, subject: str, body_html: str, body_text: str | None = None) -> dict:
+    """HTML 发信（可附纯文本回退）。返回 {ok, host|error}。"""
+    return send_mime(to, subject, body_text=body_text, body_html=body_html)
 
 
 def _imap_session():
