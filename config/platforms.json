@@ -101,11 +101,12 @@
   {
     "id": "rccchina",
     "name": "瑞达恒(标慧帮)",
-    "enabled": true,
+    "enabled": false,
     "route": "http",
     "params": {
       "home": "http://www.rccchina.com/"
     },
-    "proxy": null
+    "proxy": null,
+    "note": "暂缓（2026-08-25 用户决定）：手机号+短信注册墙暂无账号；邮件验证码回传闭环已就绪（.cursor/docs/rccchina_email_auth.md），提供账号后置 enabled=true 即恢复"
   }
 ]

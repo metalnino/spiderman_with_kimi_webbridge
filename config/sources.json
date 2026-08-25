@@ -82,9 +82,9 @@
     "note": "二级 Playwright：搜索 aspx 结果为 JS 加载；数据为工程项目信息(含阶段列)，如实入库"
   },
   "rccchina": {
-    "enabled": true,
+    "enabled": false,
     "name": "瑞达恒(标慧帮)",
     "home": "http://www.rccchina.com/",
-    "note": "注册墙（手机号+短信验证码），三级均不可直取；占位源如实报 register_wall + 登记待办，待账号"
+    "note": "暂缓（2026-08-25）：注册墙（手机号+短信验证码）暂无账号；邮件验证码回传闭环已就绪，有账号后 enabled=true 即恢复"
   }
 }
