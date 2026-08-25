@@ -1,0 +1,13 @@
+{
+  "default": null,
+  "per_source": {
+    "qianlima": null
+  },
+  "notes": [
+    "HTTP 路径代理（HttpSession/urllib）配置。值 = http:// 或 https:// 代理串，null = 直连。",
+    "优先级：per_source > default > 环境变量 SPIDER_PROXY。",
+    "qianlima 2026-08-25 被站点级 CloudWAF 418 硬拦（IP 级）；此处填入代理后，采集自动改走 HTTP+代理路径（不再走 WebBridge），解封效果见 scripts/probe_qianlima_proxy.py。",
+    "仅支持 http/https 代理；socks5 请用本地转换端口或系统级代理（TUN 模式）。",
+    "Playwright/WebBridge 浏览器路径不走此配置；如需代理请用系统级代理（如 Clash TUN/Proxifier）。"
+  ]
+}

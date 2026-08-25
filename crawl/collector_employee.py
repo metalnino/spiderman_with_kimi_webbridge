@@ -42,6 +42,7 @@ from db import connect  # noqa: E402
 from crawl import runner  # noqa: E402
 from crawl import tenderfile as tenderfile_mod  # noqa: E402
 from crawl.backfill import auto_backfill_pass  # noqa: E402
+from crawl.config_loader import proxy_for  # noqa: E402
 from crawl.models import Notice  # noqa: E402
 from crawl.sources import REGISTRY as SOURCE_REGISTRY  # noqa: E402
 
@@ -93,6 +94,10 @@ BROWSER_ROUTES = {
 def _run_platform(pid: str, keywords: list[str], max_pages: int) -> dict:
     """平台→执行路径路由。统一返回 {status, error, notices:[dict], raw_total, run_id}。"""
     route = BROWSER_ROUTES.get(pid)
+    if route and pid == "qianlima" and proxy_for(pid):
+        # 千里马 418 封禁期：配置了代理 → 退回 HTTP 内核路径（代理在 HttpSession 生效）；
+        # 未配置代理则维持 WebBridge 桥路径（遇 418 只探 1 词即停，自愈探测）。
+        route = None
     if not route:
         return runner.run_source(pid, keywords=keywords, max_pages=max_pages)
     if route["route"] == "webbridge":

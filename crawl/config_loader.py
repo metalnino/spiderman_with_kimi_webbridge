@@ -45,6 +45,39 @@ def anti_bot_cfg() -> dict:
     return load_json("config/anti_bot.json")
 
 
+def proxy_cfg() -> dict:
+    """config/proxy.json（缺失/解析失败 → 空配置，等价全直连）。"""
+    p = ROOT / "config" / "proxy.json"
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def proxy_for(source_id: str | None) -> str | None:
+    """解析某源站（或全局）代理。优先级：per_source[source_id] > default > env SPIDER_PROXY。
+
+    值必须 http:// 或 https:// 开头，否则抛 ValueError（配置错误要响，不静默直连）。"""
+    import os
+
+    cfg = proxy_cfg()
+    per = (cfg.get("per_source") or {})
+    val = None
+    if source_id and per.get(source_id):
+        val = str(per[source_id])
+    elif cfg.get("default"):
+        val = str(cfg["default"])
+    env = os.environ.get("SPIDER_PROXY")
+    if env:
+        val = env.strip()
+    if not val:
+        return None
+    if not (val.startswith("http://") or val.startswith("https://")):
+        raise ValueError(f"proxy 必须是 http:// 或 https:// 开头（当前: {val[:40]}）；socks 请用系统级代理或本地转换端口")
+    return val
+
+
 def crawl_cfg() -> dict:
     return load_json("config/crawl_config.json")
 

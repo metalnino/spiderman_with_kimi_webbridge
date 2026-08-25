@@ -96,7 +96,7 @@
       "list": "webbridge",
       "detail": "bridge",
       "on_waf_418": "stop_keyword_backoff",
-      "note": "2026-08-25 实网探针（data/qianlima_ui_probe.json）：真人浏览器开官网/搜索页均正常、WAF cookie 已下发，但站点自己前端发的全部 /api/v1/* 请求同样 418（含其自带 3 次降级重试）——IP/设备级硬拦截，非模拟不足。桥路由（scripts/crawl_qianlima_wb.py）遇 418 只探 1 词即停手，解封后自动恢复；详情 bid-<id>.html 419 反爬→详情走桥",
+      "note": "2026-08-25 早间被站点级 CloudWAF 418 硬拦（IP 级：真人浏览器+站内 SPA 自身请求同样 418，证据 data/qianlima_ui_probe.json）；晚间经 HK 出口代理解封验证（20 词全量 raw=345 kept=62）。无代理环境再遇 418：桥路由只探 1 词即停（不轰炸），自愈探测等解封；也可走 config/proxy.json 配代理退回 HTTP 内核路径。详情 bid-<id>.html 419 反爬→详情走桥",
       "timeout_sec": 45,
       "retries": 3
     }

@@ -7,7 +7,7 @@ import urllib.request
 from http.cookiejar import CookieJar
 from typing import Optional
 
-from crawl.config_loader import anti_bot_cfg
+from crawl.config_loader import anti_bot_cfg, proxy_for
 from crawl import cookie_store
 from crawl.jsl_clearance import try_solve_521
 from crawl.warm_session import WARM_URLS
@@ -35,7 +35,11 @@ class HttpSession:
     def __init__(self, source_id: str | None = None):
         self.source_id = source_id
         self.cj = CookieJar()
-        self.opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(self.cj))
+        self.proxy = proxy_for(source_id)  # 配置错误（非法 scheme）在此响亮报错，不静默直连
+        handlers: list = [urllib.request.HTTPCookieProcessor(self.cj)]
+        if self.proxy:
+            handlers.insert(0, urllib.request.ProxyHandler({"http": self.proxy, "https": self.proxy}))
+        self.opener = urllib.request.build_opener(*handlers)
         ab = anti_bot_cfg()
         http = ab.get("http") or {}
         per = ((ab.get("per_source") or {}).get(source_id or "") or {})
