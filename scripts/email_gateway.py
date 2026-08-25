@@ -1,7 +1,8 @@
 """邮件网关（Gmail）：SMTP 发信 + IMAP 收信 + 短信验证码提取。
 
-凭据：项目 .env 的 GMAIL_USER / GMAIL_APP_PASSWORD（Gmail 需开启 IMAP；可与发日报的
-应用专用密码复用）；默认收件人 EMAIL_TO（缺省 279152260@qq.com）。
+凭据：项目 .env 的 GMAIL_USER + GMAIL_APP_PASSWORD（SMTP 发信）与
+GMAIL_IMAP_PASSWORD（IMAP 收信，缺省回退发信密码；Gmail 需开启 IMAP）；
+默认收件人 EMAIL_TO（缺省 279152260@qq.com）。
 
 代理：Python 的 smtplib/imaplib 不走系统代理，国内直连 Gmail 不稳定。本网关支持
 HTTP CONNECT 隧道：代理取 .env EMAIL_PROXY > 环境变量 SPIDER_PROXY > 系统代理设置
@@ -28,8 +29,36 @@ from db import load_env  # noqa: E402
 
 
 def creds() -> tuple[str, str]:
+    """SMTP 发信凭据（.env GMAIL_USER / GMAIL_APP_PASSWORD）。"""
     env = load_env()
     return (env.get("GMAIL_USER") or "").strip(), (env.get("GMAIL_APP_PASSWORD") or "").strip()
+
+
+def imap_creds() -> tuple[str, str]:
+    """IMAP 收信凭据（.env GMAIL_USER / GMAIL_IMAP_PASSWORD，缺省回退 GMAIL_APP_PASSWORD）。"""
+    env = load_env()
+    user = (env.get("GMAIL_USER") or "").strip()
+    pw = (env.get("GMAIL_IMAP_PASSWORD") or env.get("GMAIL_APP_PASSWORD") or "").strip()
+    return user, pw
+
+
+def qq_creds() -> tuple[str, str]:
+    """QQ 邮箱凭据（.env EMAIL_USER 缺省 279152260@qq.com / EMAIL_PASSWORD=QQ 授权码）。"""
+    env = load_env()
+    user = (env.get("EMAIL_USER") or "279152260@qq.com").strip()
+    pw = (env.get("EMAIL_PASSWORD") or "").strip()
+    return user, pw
+
+
+def provider() -> str:
+    """EMAIL_PROVIDER：qq|gmail，默认 gmail；qq 用于 Gmail 被网络封锁的环境。"""
+    return (load_env().get("EMAIL_PROVIDER") or "gmail").strip().lower()
+
+
+def _endpoints(p: str) -> dict:
+    if p == "qq":
+        return {"smtp_host": "smtp.qq.com", "smtp_port": 465, "imap_host": "imap.qq.com", "imap_port": 993}
+    return {"smtp_host": "smtp.gmail.com", "smtp_port": 465, "imap_host": "imap.gmail.com", "imap_port": 993}
 
 
 def default_to() -> str:
@@ -103,15 +132,18 @@ def _smpt_attempt(host: str, port: int, user: str, app_pw: str, msg) -> tuple[bo
 
 def send(to: str, subject: str, body_text: str) -> dict:
     """SMTP 发信（465 直连→465 走代理→587 回退）。返回 {ok, host|error}。"""
-    user, app_pw = creds()
+    p = provider()
+    ep = _endpoints(p)
+    user, app_pw = qq_creds() if p == "qq" else creds()
     if not user or not app_pw:
-        return {"ok": False, "error": "no_credentials: .env 缺 GMAIL_USER/GMAIL_APP_PASSWORD"}
+        key = "EMAIL_USER/EMAIL_PASSWORD(QQ 授权码)" if p == "qq" else "GMAIL_USER/GMAIL_APP_PASSWORD"
+        return {"ok": False, "error": f"no_credentials: .env 缺 {key}"}
     msg = email.message.EmailMessage()
     msg["From"] = user
     msg["To"] = to
     msg["Subject"] = subject
     msg.set_content(body_text)
-    attempts = [("smtp.gmail.com", 465)]
+    attempts = [(ep["smtp_host"], ep["smtp_port"])]
     last = ""
     for host, port in attempts:
         try:
@@ -124,14 +156,28 @@ def send(to: str, subject: str, body_text: str) -> dict:
 
 
 def _imap_session():
-    user, app_pw = creds()
+    p = provider()
+    ep = _endpoints(p)
+    user, app_pw = qq_creds() if p == "qq" else imap_creds()
     if not user or not app_pw:
         raise RuntimeError("no_credentials")
     cls = _TunneledIMAP4_SSL if proxy() else imaplib.IMAP4_SSL
-    m = cls("imap.gmail.com", 993, timeout=30)
+    m = cls(ep["imap_host"], ep["imap_port"], timeout=30)
     m.login(user, app_pw)
     m.select("INBOX")
     return m
+
+
+def imap_status() -> dict:
+    """IMAP 连通性/健康检查：返回 {ok, total(收件箱邮件数)|error}。"""
+    try:
+        m = _imap_session()
+        _, data = m.select("INBOX")
+        total = int(data[0]) if data and data[0] else 0
+        m.logout()
+        return {"ok": True, "total": total}
+    except Exception as e:  # noqa: BLE001
+        return {"ok": False, "error": str(e)[:200]}
 
 
 def _dec(v: str | None) -> str:

@@ -49,8 +49,9 @@ def _phone() -> str:
 
 
 def _creds_ready() -> bool:
-    u, p = eg.creds()
-    return bool(u and p)
+    u1, p1 = eg.creds()
+    u2, p2 = eg.imap_creds()
+    return bool(u1 and p1 and u2 and p2)
 
 
 def _fill_phone_js(phone: str) -> str:

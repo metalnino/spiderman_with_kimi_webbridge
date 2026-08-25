@@ -86,6 +86,19 @@ class TestGatewayFlow(unittest.TestCase):
                 eg._tunnel_raw_socket("imap.gmail.com", 993)
         fake_sock.close.assert_called_once()
 
+    def test_qq_provider_endpoints_and_creds(self):
+        with mock.patch.object(eg, "provider", return_value="qq"), \
+             mock.patch.object(eg, "qq_creds", return_value=("279152260@qq.com", "shouquanma")):
+            self.assertEqual(eg._endpoints("qq")["smtp_host"], "smtp.qq.com")
+            self.assertEqual(eg._endpoints("qq")["imap_port"], 993)
+            # send 走 QQ 主机
+            fake_smtp = mock.MagicMock()
+            with mock.patch.object(eg.smtplib, "SMTP_SSL", return_value=fake_smtp) as smtp_mock, \
+                 mock.patch.object(eg, "proxy", return_value=None):
+                r = eg.send("to@x.com", "主题", "正文")
+            self.assertTrue(r["ok"])
+            self.assertEqual(smtp_mock.call_args[0][0], "smtp.qq.com")
+
 
 class TestRccchinaEmailAuth(unittest.TestCase):
     def _mod(self):
