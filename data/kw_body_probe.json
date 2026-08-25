@@ -1,0 +1,55 @@
+{
+  "total": {
+    "total": 463,
+    "has_summary": "4"
+  },
+  "body_matched": {
+    "body_matched": 1,
+    "kw_in_summary": "0"
+  },
+  "body_matched_all": {
+    "body_matched_all": 198
+  },
+  "by_source": [
+    {
+      "source_id": "tgnet",
+      "c": 117,
+      "has_summary": "0"
+    },
+    {
+      "source_id": "jiangsu_zhaobiao",
+      "c": 92,
+      "has_summary": "0"
+    },
+    {
+      "source_id": "yfbzb",
+      "c": 87,
+      "has_summary": "0"
+    },
+    {
+      "source_id": "chinabidding",
+      "c": 60,
+      "has_summary": "1"
+    },
+    {
+      "source_id": "qianlima",
+      "c": 60,
+      "has_summary": "0"
+    },
+    {
+      "source_id": "jsggzy",
+      "c": 20,
+      "has_summary": "1"
+    },
+    {
+      "source_id": "cebpub",
+      "c": 17,
+      "has_summary": "0"
+    },
+    {
+      "source_id": "ggzy",
+      "c": 10,
+      "has_summary": "2"
+    }
+  ]
+}

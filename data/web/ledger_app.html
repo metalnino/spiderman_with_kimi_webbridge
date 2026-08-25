@@ -31,6 +31,7 @@ input.remark:focus{border-color:#d1d5db;background:#fff}
 .unread{font-weight:650;color:#111827}
 .read{color:#9ca3af}
 .tag{display:inline-block;background:#eef2ff;color:#4338ca;border-radius:4px;padding:0 4px;font-size:11px;margin:1px}
+.kw-body{background:#fde68a;color:#92400e}
 a{color:#2563eb;text-decoration:none}
 a:hover{text-decoration:underline}
 /* P4 详情抽屉 */
@@ -183,6 +184,21 @@ function hlTitle(title, kw) {
   if (i < 0) return esc(title);
   return esc(title.slice(0,i)) + '<mark>'+esc(kw)+'</mark>' + esc(title.slice(i+kw.length));
 }
+function hlAll(text, kw) {
+  if (!text) return '';
+  if (!kw) return esc(text);
+  const parts = text.split(kw);
+  if (parts.length === 1) return esc(text);
+  return parts.map((p, i) => i ? '<mark>'+esc(kw)+'</mark>'+esc(p) : esc(p)).join('');
+}
+function kwTag(kw, title) {
+  if (!kw) return '';
+  const inTitle = !!(title && title.indexOf(kw) >= 0);
+  const cls = inTitle ? 'tag' : 'tag kw-body';
+  const label = inTitle ? esc(kw) : '正文·'+esc(kw);
+  const tip = inTitle ? '标题命中' : '正文命中（标题未含该词）';
+  return ' <span class="'+cls+'" title="'+tip+'">'+label+'</span>';
+}
 
 async function loadMonitor() {
   const [sum, runs] = await Promise.all([api('/api/summary'), api('/api/runs?limit=40')]);
@@ -254,6 +270,7 @@ async function loadLeads() {
       + '<td>'+fmtAmount(r)+'</td>'
       + '<td>'+leadSelect(r.amount_status||(r.amount!=null?'待确认':'无金额'), AMOUNT_STATUSES, 'lead-sel', r.id, 'amount')+'</td>'
       + '<td><span class="row-title" data-id="'+r.id+'">'+hlTitle(r.title, r.keyword)+'</span>'
+      + kwTag(r.keyword, r.title)
       + ' <span class="tag">'+esc(r.stage_label||'其他')+'</span>'
       + multi + buyer + ' <br><small class="hint">'+links.join(' · ')+'</small></td>'
       + '<td>'+esc(r.publish_date||'-')+'</td>'
@@ -390,7 +407,12 @@ function renderDrawer(d) {
     backfill += '<div class="hint" style="margin-top:4px">最近回填：<b style="color:'+(ok?'#0d7a3f':'#b91c1c')+'">'+esc(n.detail_status)+'</b></div>';
   }
   if (n.summary) {
-    backfill += '<div class="summary-box"><b>正文摘要</b><br>'+esc(n.summary)+'</div>';
+    const inTitle = !!(n.title && n.keyword && n.title.indexOf(n.keyword) >= 0);
+    const inBody = !!(n.keyword && n.summary.indexOf(n.keyword) >= 0);
+    const hl = n.keyword ? hlAll(n.summary, n.keyword) : esc(n.summary);
+    let hint = '';
+    if (n.keyword && !inTitle && inBody) hint = '<div class="hint" style="margin-top:4px">正文命中「'+esc(n.keyword)+'」（标题未含该词）</div>';
+    backfill += '<div class="summary-box"><b>正文摘要</b><br>'+hl+'</div>'+hint;
   }
   if (n.tenderfile_path) {
     backfill += '<div style="margin-top:6px"><a href="/api/notices/'+n.id+'/tenderfile" target="_blank">📎 下载附件（已提取正文）</a></div>';
