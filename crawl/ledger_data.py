@@ -251,7 +251,7 @@ def notices(
     lead_status: str | None = None,
     amount_min: float | None = None,
     amount_max: float | None = None,
-    sort: str = "created",
+    sort: str = "publish",
     limit: int = 50,
     offset: int = 0,
     target_only: bool = False,
@@ -351,7 +351,7 @@ def export_csv(**filters) -> str:
         filters.get("lead_status"), filters.get("amount_min"), filters.get("amount_max"),
         filters.get("target_only"), filters.get("stage"), filters.get("actionable"),
     )
-    order = _SORTS.get(filters.get("sort"), _SORTS["created"])
+    order = _SORTS.get(filters.get("sort"), _SORTS["publish"])
     rows = _rows(f"SELECT {NOTICE_SELECT} FROM notices WHERE {wsql} ORDER BY {order} LIMIT 5000", tuple(args))
     buf = io.StringIO()
     w = csv.writer(buf)

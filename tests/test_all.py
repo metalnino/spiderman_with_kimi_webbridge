@@ -148,6 +148,11 @@ class TestP3(unittest.TestCase):
         items = list(src.fetch(["绿化养护"], max_pages=1))
         self.assertGreater(len(items), 0)
         self.assertTrue(all(i.province == "江苏" or "江苏" in (i.region_text or "") for i in items[:5]))
+        # 省站 API 实际字段是 infodatepx（=详情页「信息发布时间」），历史曾漏取导致 publish_date 全空
+        self.assertTrue(
+            any(i.publish_date for i in items),
+            "jsggzy 省站结果应至少部分带 infodatepx 发布时间",
+        )
 
     def test_crm_build(self):
         sys.path.insert(0, str(ROOT / "scripts" / "jobs"))

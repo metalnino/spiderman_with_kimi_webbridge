@@ -153,7 +153,13 @@ class JsggzySource(BaseSource):
                         source_name=self.source_name,
                         external_id=f"jsggzy-{rid}",
                         title=title,
-                        publish_date=(rec.get("webdate") or rec.get("publishTime") or "")[:19],
+                        publish_date=(
+                            rec.get("infodatepx")          # 与详情页「信息发布时间」一致（2026-08-25 实测 6/6 命中）
+                            or rec.get("infodateformat")   # 同上的纯日期形态
+                            or rec.get("webdate")          # 历史字段名兜底
+                            or rec.get("publishTime")
+                            or ""
+                        )[:19],
                         province="江苏",
                         city=self.match_city(title, "江苏"),
                         keyword=kw,
