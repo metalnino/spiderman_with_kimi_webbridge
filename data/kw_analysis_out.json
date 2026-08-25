@@ -84,6 +84,7 @@
       "垂直绿化",
       "大堂绿植",
       "室内植物租赁",
+      "室内绿化",
       "室内绿植",
       "室外绿化",
       "屋顶绿化",
@@ -179,6 +180,11 @@
     },
     {
       "keyword": "室内植物租赁",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "室内绿化",
       "enabled": 1,
       "group_name": "active"
     },
@@ -334,11 +340,6 @@
     },
     {
       "keyword": "园林养护",
-      "enabled": 0,
-      "group_name": "active"
-    },
-    {
-      "keyword": "室内绿化",
       "enabled": 0,
       "group_name": "active"
     }
