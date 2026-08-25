@@ -1,0 +1,111 @@
+{
+  "total": {
+    "total": 463,
+    "in_title": "265",
+    "not_in_title": "198",
+    "no_kw": "0"
+  },
+  "clean_pass": 353,
+  "per_keyword": [
+    {
+      "keyword": "绿植租摆",
+      "c": 64,
+      "in_title": "57"
+    },
+    {
+      "keyword": "绿化租摆",
+      "c": 54,
+      "in_title": "30"
+    },
+    {
+      "keyword": "绿植租赁",
+      "c": 43,
+      "in_title": "42"
+    },
+    {
+      "keyword": "室内绿植",
+      "c": 39,
+      "in_title": "28"
+    },
+    {
+      "keyword": "花卉租赁",
+      "c": 32,
+      "in_title": "20"
+    },
+    {
+      "keyword": "绿植摆放",
+      "c": 24,
+      "in_title": "18"
+    },
+    {
+      "keyword": "写字楼绿植",
+      "c": 21,
+      "in_title": "4"
+    },
+    {
+      "keyword": "花卉租摆",
+      "c": 21,
+      "in_title": "20"
+    },
+    {
+      "keyword": "室内植物租赁",
+      "c": 20,
+      "in_title": "0"
+    },
+    {
+      "keyword": "办公楼绿植",
+      "c": 19,
+      "in_title": "8"
+    },
+    {
+      "keyword": "绿植服务",
+      "c": 18,
+      "in_title": "9"
+    },
+    {
+      "keyword": "植物租赁",
+      "c": 17,
+      "in_title": "6"
+    },
+    {
+      "keyword": "办公室绿化",
+      "c": 17,
+      "in_title": "2"
+    },
+    {
+      "keyword": "办公场所绿化",
+      "c": 15,
+      "in_title": "2"
+    },
+    {
+      "keyword": "职场绿植绿化",
+      "c": 12,
+      "in_title": "0"
+    },
+    {
+      "keyword": "办公绿化",
+      "c": 11,
+      "in_title": "0"
+    },
+    {
+      "keyword": "大堂绿植",
+      "c": 10,
+      "in_title": "7"
+    },
+    {
+      "keyword": "办公楼绿化",
+      "c": 10,
+      "in_title": "3"
+    },
+    {
+      "keyword": "办公区绿化",
+      "c": 9,
+      "in_title": "6"
+    },
+    {
+      "keyword": "酒店绿植",
+      "c": 7,
+      "in_title": "3"
+    }
+  ]
+}
