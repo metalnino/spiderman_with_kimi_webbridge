@@ -16,7 +16,7 @@
     "rate_limit_note": "频控页→冷却阶梯(90/180/300s)→整站冷却600s重试一次→仍拦则保留部分结果；本机 WebBridge 双IP兜底 scripts/crawl_ccgp_wb.py"
   },
   "ggzy": {
-    "enabled": false,
+    "enabled": true,
     "name": "全国公共资源交易平台",
     "api": "https://www.ggzy.gov.cn/information/pubTradingInfo/getTradList",
     "deal_time": "05",
@@ -33,14 +33,14 @@
     "rp": 15
   },
   "cebpub": {
-    "enabled": false,
+    "enabled": true,
     "name": "中国招标投标公共服务平台",
     "list_url": "https://bulletin.cebpubservice.com/xxfbcmses/search/bulletin.html",
     "method": "webbridge",
     "note": "搜索已改 JS 渲染+加密(getSearch.do)，HTTP 不可用；走 WebBridge 浏览器爬(本机 scripts/crawl_cebpub_wb.py)"
   },
   "jsggzy": {
-    "enabled": false,
+    "enabled": true,
     "name": "江苏省公共资源交易网",
     "home": "http://jsggzy.jszwfw.gov.cn/",
     "list_page": "http://jsggzy.jszwfw.gov.cn/jyxx/tradeInfonew.html",
@@ -52,7 +52,7 @@
     "note": "未配置 Cookie 时仅列表；配置后可尝试详情字段"
   },
   "jiangsu_zhaobiao": {
-    "enabled": false,
+    "enabled": true,
     "name": "江苏招标网",
     "home": "https://jiangsu.zhaobiao.cn/",
     "search_api": "https://jiangsu.zhaobiao.cn/psearch/Dqsearch",

@@ -22,7 +22,7 @@ REGISTRY = {
     "rccchina": RccchinaSource,
 }
 
-# 源站稳定顺序；是否启用由 config/sources.json 的 enabled 控制（ggzy/jsggzy 默认 disabled）
+# 源站稳定顺序；是否启用由 config/sources.json 的 enabled 控制（与 platforms.json 外壳层九站口径一致）
 SOURCE_ORDER = [
     "cebpub", "chinabidding", "ccgp", "ggzy", "jsggzy", "jiangsu_zhaobiao",
     "yfbzb", "qianlima", "tgnet", "rccchina",
