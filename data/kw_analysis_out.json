@@ -81,24 +81,38 @@
       "办公楼绿植",
       "办公绿化",
       "园区绿化",
+      "垂直绿化",
       "大堂绿植",
       "室内植物租赁",
       "室内绿植",
       "室外绿化",
+      "屋顶绿化",
       "景观养护",
+      "植物墙",
       "植物租赁",
       "物业绿化",
+      "球场养护",
+      "盆栽",
+      "移栽",
+      "立体绿化",
       "绿化养护",
       "绿化租摆",
       "绿化管养",
+      "绿墙",
       "绿植摆放",
       "绿植服务",
       "绿植租摆",
       "绿植租赁",
+      "绿雕",
       "职场绿植绿化",
       "花卉租摆",
       "花卉租赁",
+      "花卉采购",
+      "花境",
+      "苗木采购",
       "草坪养护",
+      "补植",
+      "足球场养护",
       "酒店绿植"
     ],
     "scene_as_tag_only": [
@@ -108,7 +122,6 @@
       "商业综合体绿化",
       "商业空间绿化",
       "会所绿化",
-      "屋顶绿化",
       "购物中心绿化",
       "商场绿植"
     ]
@@ -155,6 +168,11 @@
       "group_name": "active"
     },
     {
+      "keyword": "垂直绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
       "keyword": "大堂绿植",
       "enabled": 1,
       "group_name": "active"
@@ -175,7 +193,17 @@
       "group_name": "active"
     },
     {
+      "keyword": "屋顶绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
       "keyword": "景观养护",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "植物墙",
       "enabled": 1,
       "group_name": "active"
     },
@@ -186,6 +214,26 @@
     },
     {
       "keyword": "物业绿化",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "球场养护",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "盆栽",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "移栽",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "立体绿化",
       "enabled": 1,
       "group_name": "active"
     },
@@ -201,6 +249,11 @@
     },
     {
       "keyword": "绿化管养",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "绿墙",
       "enabled": 1,
       "group_name": "active"
     },
@@ -225,6 +278,11 @@
       "group_name": "active"
     },
     {
+      "keyword": "绿雕",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
       "keyword": "职场绿植绿化",
       "enabled": 1,
       "group_name": "active"
@@ -240,7 +298,32 @@
       "group_name": "active"
     },
     {
+      "keyword": "花卉采购",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "花境",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "苗木采购",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
       "keyword": "草坪养护",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "补植",
+      "enabled": 1,
+      "group_name": "active"
+    },
+    {
+      "keyword": "足球场养护",
       "enabled": 1,
       "group_name": "active"
     },
@@ -256,31 +339,6 @@
     },
     {
       "keyword": "室内绿化",
-      "enabled": 0,
-      "group_name": "active"
-    },
-    {
-      "keyword": "植物墙",
-      "enabled": 0,
-      "group_name": "active"
-    },
-    {
-      "keyword": "立体绿化",
-      "enabled": 0,
-      "group_name": "active"
-    },
-    {
-      "keyword": "花卉采购",
-      "enabled": 0,
-      "group_name": "active"
-    },
-    {
-      "keyword": "苗木采购",
-      "enabled": 0,
-      "group_name": "active"
-    },
-    {
-      "keyword": "足球场养护",
       "enabled": 0,
       "group_name": "active"
     }
