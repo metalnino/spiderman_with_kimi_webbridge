@@ -597,6 +597,20 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
     for it in output:
         it.pop("notice_stage", None)
 
+    # ---- 邮件验证码回传闭环：rccchina 本轮撞墙 → 自动发请求邮件+轮询回复登录（人不在家场景）----
+    email_auth = {"skipped": True, "reason": "no_wall"}
+    if "rccchina" in run_list and "SPIDER_NO_EMAIL_AUTH" not in os.environ:
+        rcc = next((p for p in per_platform if p.get("platform") == "rccchina"), None) or {}
+        rcc_err = str(rcc.get("error") or "")
+        if "register_wall" in rcc_err or "cookie_ok_api_unmapped" in rcc_err:
+            try:
+                from scripts.jobs import rccchina_email_auth as ea
+
+                print("[collector] rccchina 撞墙 → 启动邮件验证码回传闭环（≤8 分钟）", flush=True)
+                email_auth = ea.auto(timeout_min=8)
+            except Exception as e:  # noqa: BLE001 —— 邮件闭环失败不影响主采集结果
+                email_auth = {"ok": False, "error": str(e)[:200]}
+
     # 观测指标（严格对齐契约 observability.metrics 七项）
     blocked_errors = list(errors_by_platform) + list(detail_stats["errors"])
     metrics = {
@@ -624,6 +638,7 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
         "skipped": skipped,
         "filterDrops": drop_counts,
         "detailFetch": detail_stats["summary"],
+        "emailAuth": email_auth,
         "missingPublishTimeCount": sum(1 for it in output if not it["publishTime"]),
         "notes": [
             "blocked_count 口径：源站最终错误串中的 403/频控/封禁 信号数（含详情抓取环节；内核内部重试期间的 403 不对外可见）。",
@@ -651,6 +666,7 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
         "open_todos": _open_todo_count(),
         "window_note": window_note,
         "auto_backfill": auto_backfill,
+        "email_auth": email_auth,
         # P7 覆盖自证：每站水位推进（wm_new=本轮新见原始 id，wm_total=水位规模，pages=扫描页数）
         "coverage": {
             p["platform"]: p.get("watermark")
