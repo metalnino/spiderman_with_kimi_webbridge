@@ -336,18 +336,27 @@ class TestConfigLayer(unittest.TestCase):
         self.assertEqual(cfg["ccgp"]["time_type"], "5")
         self.assertTrue(cfg["chinabidding"]["list_api"].startswith("https://www.chinabidding.com.cn/"))
 
-    def test_six_platforms_all_enabled_with_routes(self):
+    def test_nine_platforms_all_enabled_with_routes(self):
         plats = {e["id"]: e for e in ce.load_platforms()}
-        for pid in ("ccgp", "chinabidding", "ggzy", "jsggzy", "cebpub", "jiangsu_zhaobiao"):
+        for pid in ("ccgp", "chinabidding", "ggzy", "jsggzy", "cebpub",
+                    "jiangsu_zhaobiao", "yfbzb", "qianlima", "tgnet"):
             self.assertTrue(plats[pid].get("enabled"), f"{pid} 应启用")
             self.assertIn(plats[pid].get("route"), ("http", "playwright", "webbridge"), f"{pid} route 非法")
         self.assertEqual(plats["cebpub"]["route"], "playwright")
         self.assertEqual(plats["jiangsu_zhaobiao"]["route"], "webbridge")
-        # enabled/route 不得泄漏进内核 sources_cfg（内核启用口径保持独立）
+        self.assertEqual(plats["qianlima"]["route"], "webbridge")
+        self.assertFalse(plats["rccchina"].get("enabled"))
+        # route/name/proxy 属外壳层元数据，不泄漏进内核 sources_cfg 的字段本体
         from crawl.config_loader import sources_cfg
         cfg = sources_cfg()
         self.assertNotIn("route", cfg.get("cebpub") or {})
-        self.assertFalse((cfg.get("jiangsu_zhaobiao") or {}).get("enabled"))
+
+    def test_no_source_config_drift(self):
+        from crawl.sources import source_config_drift, enabled_source_ids
+        d = source_config_drift()
+        self.assertTrue(d.get("has_platforms"), "platforms.json 应存在")
+        self.assertFalse(d.get("drifted"), f"源站启用口径漂移: {d}")
+        self.assertEqual(len(enabled_source_ids()), 9)
 
     def test_platforms_overlay_only_params(self):
         from crawl.config_loader import platform_overrides

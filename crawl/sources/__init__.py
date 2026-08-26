@@ -29,12 +29,62 @@ SOURCE_ORDER = [
 ]
 
 
+def _platform_enabled_ids() -> list[str] | None:
+    """config/platforms.json（员工外壳改进层）里启用的平台 id；文件缺失/解析失败返回 None。
+
+    platforms.json 是本机启用口径的唯一权威（Windows 任务 SpidermanCollector 读它）；
+    返回 None 表示「无外壳层」，调用方回退 config/sources.json（Docker/NAS 场景）。
+    """
+    from crawl.config_loader import ROOT, load_json
+
+    if not (ROOT / "config" / "platforms.json").exists():
+        return None
+    try:
+        entries = load_json("config/platforms.json")
+    except (OSError, ValueError):
+        return None
+    ids: list[str] = []
+    for e in entries or []:
+        if isinstance(e, dict) and e.get("id") and e.get("enabled") is not False:
+            ids.append(str(e["id"]))
+    return ids
+
+
 def enabled_source_ids() -> list[str]:
-    """返回已启用源站（按 SOURCE_ORDER）。"""
+    """返回已启用源站（按 SOURCE_ORDER）。
+
+    唯一权威 = config/platforms.json；外壳层缺失时才回退 config/sources.json。
+    """
+    plat = _platform_enabled_ids()
+    if plat is not None:
+        return [sid for sid in SOURCE_ORDER if sid in plat]
     from crawl.config_loader import sources_cfg
 
     cfg = sources_cfg()
     return [sid for sid in SOURCE_ORDER if (cfg.get(sid) or {}).get("enabled") is not False]
+
+
+def source_config_drift() -> dict:
+    """platforms.json 与 sources.json 启用集对比，供启动告警 / health / 回归测试。
+
+    drifted=True 说明两层口径不一致（改了其中一层忘同步另一层）。
+    """
+    plat = _platform_enabled_ids()
+    from crawl.config_loader import sources_cfg
+
+    cfg = sources_cfg()
+    kern = [sid for sid in SOURCE_ORDER if (cfg.get(sid) or {}).get("enabled") is not False]
+    if plat is None:
+        return {"has_platforms": False, "kernel_enabled": kern, "drifted": False}
+    ps, ks = sorted(plat), sorted(kern)
+    return {
+        "has_platforms": True,
+        "platforms_enabled": ps,
+        "kernel_enabled": ks,
+        "drifted": ps != ks,
+        "only_platforms": sorted(set(ps) - set(ks)),
+        "only_kernel": sorted(set(ks) - set(ps)),
+    }
 
 
 def get_source(source_id: str):

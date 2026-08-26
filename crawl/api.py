@@ -52,10 +52,13 @@ def index():
 
 @app.get("/api/health")
 def health():
+    from crawl.sources import source_config_drift
+
     return {
         "ok": True,
         "mode": "localhost_ledger",
         "bind": os.environ.get("LEDGER_HOST", DEFAULT_HOST),
+        "source_config_drift": source_config_drift(),
         "write_allow": [
             "/api/captcha/open",
             "/api/captcha/done",

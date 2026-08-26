@@ -14,8 +14,10 @@ def platform_overrides() -> dict:
     """员工外壳配置层 config/platforms.json（platformConfig[]，契约 collector/v1.0.0）。
 
     只把 params（selector 等内核参数）展开为 {平台id: {...}} 覆盖到 sources.json 底座。
-    enabled/name/route/proxy 是外壳层元数据，不泄漏进内核配置（避免影响 NAS/调度器的
-    源站启用口径）。文件不存在/解析失败时返回空 dict，内核行为与未套壳时完全一致。"""
+    启用口径以 platforms.json 为唯一权威（crawl.sources.enabled_source_ids 读它）；
+    sources.json 的 enabled 仅为无外壳层时的内核兜底；两层漂移由
+    crawl.sources.source_config_drift() 检测并在 /api/health 与回归测试中暴露。
+    文件不存在/解析失败时返回空 dict，内核行为与未套壳时完全一致。"""
     p = ROOT / "config" / "platforms.json"
     if not p.exists():
         return {}
