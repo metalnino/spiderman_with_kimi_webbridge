@@ -6,6 +6,9 @@
 - ggzy / jsggzy   → tenderfile.fetch_tenderfile（ggzy_http 模式，正文摘要+附件）
 - jiangsu_zhaobiao→ tenderfile.fetch_tenderfile（桥模式，含自动登录+附件；需桥在线）
 - cebpub          → tenderfile.fetch_tenderfile（bridge_vaptcha；验证码未过登记待办并如实返回）
+- yfbzb           → tenderfile.fetch_tenderfile（http 一级直通详情正文；无附件时仍留 page_summary）
+- qianlima        → tenderfile.fetch_tenderfile（bridge；bid-<id>.html 419 反爬，桥渲染正文）
+- tgnet           → tenderfile.fetch_tenderfile（bridge；项目详情页桥渲染，列表型正文如实返回）
 
 结果落库：字段列（amount/amount_text/buyer/agency/project_code/deadline/notice_type）、
 summary / tenderfile_path / detail_status（成功=ok，失败=err:<摘要>）。
@@ -27,8 +30,14 @@ from crawl.origin import is_http_fetchable, resolve_origin  # noqa: E402
 from crawl.tenderfile import fetch_tenderfile  # noqa: E402
 
 FIELD_SOURCES = {"ccgp"}
-SUMMARY_SOURCES = {"ggzy", "jsggzy", "jiangsu_zhaobiao", "cebpub", "chinabidding"}
-# 原发寻址只对「可能转载」的聚合站行做（ccgp 自身即原发）
+# 详情正文/附件回填路由（fetch_tenderfile 按 DETAIL_MODES 派发）：
+#   ggzy/jsggzy=ggzy_http、jiangsu_zhaobiao/chinabidding=bridge、cebpub=bridge_vaptcha、
+#   yfbzb=http（一级直通详情正文）、qianlima=bridge（bid-<id>.html 419→桥）、tgnet=bridge（项目详情桥渲染）
+SUMMARY_SOURCES = {
+    "ggzy", "jsggzy", "jiangsu_zhaobiao", "cebpub", "chinabidding",
+    "yfbzb", "qianlima", "tgnet",
+}
+# 原发寻址只对「可能转载」的聚合站行做（ccgp/yfbzb 自身即原发；tgnet/qianlima 列表型无需寻址）
 AGGREGATOR_SOURCES = {"chinabidding", "cebpub", "ggzy", "jsggzy", "jiangsu_zhaobiao"}
 
 

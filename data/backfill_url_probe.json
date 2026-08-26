@@ -1,0 +1,117 @@
+{
+  "by_source": [
+    {
+      "source_id": "tgnet",
+      "c": 117,
+      "has_detail": "117",
+      "has_official": "117"
+    },
+    {
+      "source_id": "jiangsu_zhaobiao",
+      "c": 92,
+      "has_detail": "92",
+      "has_official": "92"
+    },
+    {
+      "source_id": "yfbzb",
+      "c": 87,
+      "has_detail": "87",
+      "has_official": "87"
+    },
+    {
+      "source_id": "chinabidding",
+      "c": 60,
+      "has_detail": "60",
+      "has_official": "0"
+    },
+    {
+      "source_id": "qianlima",
+      "c": 60,
+      "has_detail": "60",
+      "has_official": "60"
+    },
+    {
+      "source_id": "jsggzy",
+      "c": 20,
+      "has_detail": "20",
+      "has_official": "0"
+    },
+    {
+      "source_id": "cebpub",
+      "c": 17,
+      "has_detail": "17",
+      "has_official": "17"
+    },
+    {
+      "source_id": "ggzy",
+      "c": 10,
+      "has_detail": "10",
+      "has_official": "0"
+    }
+  ],
+  "samples": [
+    {
+      "id": 7161,
+      "source_id": "qianlima",
+      "title": "武汉分公司本部-中信泰富广场E座大堂绿植租摆服务招标公告",
+      "detail_url": "https://www.qianlima.com/bid-611370606.html",
+      "official_url": "http://www.qianlima.com/zb/detail/20260706_611370606.html"
+    },
+    {
+      "id": 7160,
+      "source_id": "qianlima",
+      "title": "广州市公安局越秀分局物业管理服务电子卖场合同",
+      "detail_url": "https://www.qianlima.com/bid-613387558.html",
+      "official_url": "http://www.qianlima.com/zb/detail/20260713_613387558.html"
+    },
+    {
+      "id": 7136,
+      "source_id": "qianlima",
+      "title": "湖北交投建设集团有限公司宽堂写字楼绿植花卉租摆服务采购公告",
+      "detail_url": "https://www.qianlima.com/bid-615746949.html",
+      "official_url": "http://www.qianlima.com/zb/detail/20260721_615746949.html"
+    },
+    {
+      "id": 7135,
+      "source_id": "qianlima",
+      "title": "【建设集团】湖北交投建设集团有限公司2026年-2027年宽堂写字楼绿植花卉租摆服务项目预成交公示",
+      "detail_url": "https://www.qianlima.com/bid-617711581.html",
+      "official_url": "http://www.qianlima.com/zb/detail/20260728_617711581.html"
+    },
+    {
+      "id": 7155,
+      "source_id": "qianlima",
+      "title": "【初始合同】中心公园综合管理服务过渡期项目合同公示",
+      "detail_url": "https://www.qianlima.com/bid-617747278.html",
+      "official_url": "http://www.qianlima.com/zb/detail/20260728_617747278.html"
+    },
+    {
+      "id": 7150,
+      "source_id": "qianlima",
+      "title": "浙江高速石油发展有限公司办公楼绿植租摆项目二阶段成交公告",
+      "detail_url": "https://www.qianlima.com/bid-618047338.html",
+      "official_url": "http://www.qianlima.com/zb/detail/20260729_618047338.html"
+    },
+    {
+      "id": 7149,
+      "source_id": "qianlima",
+      "title": "湖北省监狱管理局局机关物业管理服务项目结果公告",
+      "detail_url": "https://www.qianlima.com/bid-619051420.html",
+      "official_url": "http://www.qianlima.com/zb/detail/20260803_619051420.html"
+    },
+    {
+      "id": 7134,
+      "source_id": "qianlima",
+      "title": "【建设集团】湖北交投建设集团有限公司2026年-2027年宽堂写字楼绿植花卉租摆服务项目终止公告",
+      "detail_url": "https://www.qianlima.com/bid-620205272.html",
+      "official_url": "http://www.qianlima.com/zb/detail/20260806_620205272.html"
+    },
+    {
+      "id": 7148,
+      "source_id": "qianlima",
+      "title": "田集电厂2026-2029年度绿化养护及绿植租摆（3年）招标公告",
+      "detail_url": "https://www.qianlima.com/bid-620728792.html",
+      "official_url": "http://www.qianlima.com/zb/detail/20260808_620728792.html"
+    }
+  ]
+}

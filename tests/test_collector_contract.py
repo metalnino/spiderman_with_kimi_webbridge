@@ -358,6 +358,13 @@ class TestConfigLayer(unittest.TestCase):
         self.assertFalse(d.get("drifted"), f"源站启用口径漂移: {d}")
         self.assertEqual(len(enabled_source_ids()), 9)
 
+    def test_all_enabled_sources_have_backfill_route(self):
+        from crawl.sources import enabled_source_ids
+        from crawl import backfill as bf
+        covered = set(bf.FIELD_SOURCES) | set(bf.SUMMARY_SOURCES)
+        missing = set(enabled_source_ids()) - covered
+        self.assertFalse(missing, f"启用源站缺详情回填路由: {missing}")
+
     def test_platforms_overlay_only_params(self):
         from crawl.config_loader import platform_overrides
         ov = platform_overrides()
