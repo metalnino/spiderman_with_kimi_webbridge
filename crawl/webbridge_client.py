@@ -48,6 +48,29 @@ def evaluate(code: str, *, session: str) -> dict:
     return call("evaluate", {"code": code}, session=session, timeout=30)
 
 
+def list_tabs(*, session: str = "spiderman", timeout: int = 30) -> list[dict]:
+    """列出当前桥内打开的 tab（含 tabId/groupTitle）。"""
+    r = call("list_tabs", {}, session=session, timeout=timeout)
+    return list((r.get("data") or {}).get("tabs") or [])
+
+
+def close_tab(tab_id, *, session: str = "spiderman", timeout: int = 30) -> bool:
+    """按 tabId 关闭一个 tab。返回是否关闭成功。"""
+    r = call("close_tab", {"tabId": tab_id}, session=session, timeout=timeout)
+    return bool((r.get("data") or {}).get("closed"))
+
+
+def close_group(group_title: str, *, session: str = "spiderman", timeout: int = 30) -> int:
+    """关闭指定 group 下的所有 tab，返回关闭数。用完桥后清理，避免浏览器吃内存卡死。"""
+    closed = 0
+    for t in list_tabs(session=session, timeout=timeout):
+        if not isinstance(t, dict):
+            continue
+        if (t.get("groupTitle") or t.get("group_title")) == group_title:
+            if close_tab(t.get("tabId"), session=session, timeout=timeout):
+                closed += 1
+    return closed
+
 
 
 # ---------------------------------------------------------------- 开桥（幂等自愈） ---
@@ -85,41 +108,28 @@ def _process_running(image: str) -> bool:
 
 def _bridge_status() -> dict:
     try:
-        with urllib.request.urlopen("http://127.0.0.1:10086/", timeout=2) as resp:
+        with urllib.request.urlopen("http://127.0.0.1:10086/status", timeout=2) as resp:
             data = json.loads(resp.read().decode("utf-8"))
-        return {"up": True, "extensions": int(data.get("extensions_connected") or 0), "raw": data}
+        ext = 1 if data.get("extension_connected") else 0
+        return {"up": bool(data.get("running", True)), "extensions": ext, "raw": data}
     except Exception:
         return {"up": False, "extensions": 0}
 
 
-def _spawn_server() -> bool:
-    """后台启动桥服务端（与调用方进程脱离，调用方退出后桥仍在）。返回是否成功监听。"""
+def _start_official_daemon() -> bool:
+    """启动官方 kimi-webbridge daemon（v2.x 扩展配套，替代旧 Python 桥服务）。返回是否成功监听。"""
+    import os
     import subprocess
-    import sys
     from pathlib import Path
 
-    root = Path(__file__).resolve().parents[1]
-    server = root / "scripts" / "webbridge_server.py"
-    logf = root / "data" / "web" / "webbridge_server.log"
-    logf.parent.mkdir(parents=True, exist_ok=True)
-    pidfile = root / "data" / "web" / "webbridge_server.pid"
-    kwargs = {}
-    if hasattr(subprocess, "CREATE_NEW_PROCESS_GROUP"):
-        kwargs["creationflags"] = (
-            subprocess.CREATE_NEW_PROCESS_GROUP
-            | getattr(subprocess, "DETACHED_PROCESS", 0)
-            | getattr(subprocess, "CREATE_NO_WINDOW", 0)
-        )
-    with open(logf, "a", encoding="utf-8") as out:
-        subprocess.Popen(
-            [sys.executable, str(server)],
-            cwd=str(root),
-            stdout=out,
-            stderr=out,
-            stdin=subprocess.DEVNULL,
-            env={**__import__("os").environ, "WEBRIDGE_PIDFILE": str(pidfile)},
-            **kwargs,
-        )
+    home = Path(os.environ.get("USERPROFILE") or Path.home())
+    bin_path = home / ".kimi-webbridge" / "bin" / "kimi-webbridge.exe"
+    if not bin_path.exists():
+        return False
+    try:
+        subprocess.run([str(bin_path), "start"], capture_output=True, timeout=30)
+    except Exception:
+        return False
     for _ in range(20):
         time.sleep(0.5)
         if _bridge_status()["up"]:
@@ -128,18 +138,18 @@ def _spawn_server() -> bool:
 
 
 def _open_browser_if_needed() -> str | None:
-    """浏览器没开就开一个（Chrome 优先，扩展会自动连桥）。返回启动的程序路径或 None。"""
+    """确保 Chrome 在跑（扩展装在 Chrome，Edge 扩展已弃用）。Chrome 没开就开一个，加 --no-proxy-server 直连。"""
     import subprocess
 
-    if _process_running("chrome.exe") or _process_running("msedge.exe"):
+    if _process_running("chrome.exe"):
         return None
-    exe = _first_existing(CHROME_CANDIDATES) or _first_existing(EDGE_CANDIDATES)
+    exe = _first_existing(CHROME_CANDIDATES)
     if not exe:
         return None
     kwargs = {}
     if hasattr(subprocess, "DETACHED_PROCESS"):
         kwargs["creationflags"] = subprocess.DETACHED_PROCESS
-    subprocess.Popen([exe], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs)
+    subprocess.Popen([exe, "--no-proxy-server"], stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs)
     return exe
 
 
@@ -151,9 +161,9 @@ def ensure_bridge(*, open_browser: bool = True, wait_sec: float = 90.0) -> dict:
     actions: list[str] = []
     st = _bridge_status()
     if not st["up"]:
-        actions.append("spawn_server")
-        if not _spawn_server():
-            return {"bridge": False, "extensions": 0, "actions": actions, "error": "server_start_failed"}
+        actions.append("start_daemon")
+        if not _start_official_daemon():
+            return {"bridge": False, "extensions": 0, "actions": actions, "error": "daemon_start_failed"}
         st = _bridge_status()
     if st["extensions"] < 1 and open_browser:
         opened = _open_browser_if_needed()

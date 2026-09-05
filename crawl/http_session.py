@@ -39,6 +39,9 @@ class HttpSession:
         handlers: list = [urllib.request.HTTPCookieProcessor(self.cj)]
         if self.proxy:
             handlers.insert(0, urllib.request.ProxyHandler({"http": self.proxy, "https": self.proxy}))
+        else:
+            # 未配置 per-source 代理时必须显式直连，绝不跟随系统代理（否则 Clash 系统代理会拖慢全部"直连"源站）
+            handlers.insert(0, urllib.request.ProxyHandler({}))
         self.opener = urllib.request.build_opener(*handlers)
         ab = anti_bot_cfg()
         http = ab.get("http") or {}

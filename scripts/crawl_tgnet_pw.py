@@ -104,7 +104,7 @@ def main(keywords: Optional[list[str]] = None) -> dict:
     notices: list[Notice] = []
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(channel="chrome", headless=True)
+            browser = p.chromium.launch(channel="chrome", headless=True, args=["--no-proxy-server"])
             page = browser.new_page()
             for kw in kws:
                 page.goto(SEARCH_URL.format(kw=quote(kw)), timeout=60000, wait_until="domcontentloaded")

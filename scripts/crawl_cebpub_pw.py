@@ -102,7 +102,7 @@ def main(keywords: list[str] | None = None) -> dict:
     notices: list[Notice] = []
     try:
         with sync_playwright() as p:
-            browser = p.chromium.launch(channel="chrome", headless=True)
+            browser = p.chromium.launch(channel="chrome", headless=True, args=["--no-proxy-server"])
             page = browser.new_page()
             page.goto(SEARCH_URL, timeout=60000, wait_until="domcontentloaded")
             page.wait_for_timeout(3000)

@@ -185,7 +185,7 @@
   "only_target_cities": true,
   "publish_date_range": {
     "start": "2026-07-01",
-    "end": "2026-08-31"
+    "end": null
   },
   "notes": {
     "area_granularity": "站点 area 仅为省级；城市靠标题/正文二次匹配",

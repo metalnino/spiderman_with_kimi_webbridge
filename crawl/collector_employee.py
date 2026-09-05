@@ -500,6 +500,13 @@ def _enrich_tenderfiles(output: list[dict], run_list: list[str]) -> dict:
         "skipped": skipped,
         "note": "cebpub=桥内尝试（vaptcha 未过如实 detail_vaptcha_gated 并登记待办，人工一次后自动生效）；bridge 站附件带登录门时如实 null、摘要尽力填充；成功率=附件下载成功/尝试，无尝试为 null。",
     }
+    # 用完关 tab：详情抓取会开多个 bridge tab，不清理会吃内存卡死
+    try:
+        closed = tenderfile_mod.close_bridge_tabs()
+        if closed:
+            summary["closed_tabs"] = closed
+    except Exception:
+        pass
     return {"success_rate": rate, "errors": errors, "summary": summary}
 
 

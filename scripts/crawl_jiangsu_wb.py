@@ -182,6 +182,14 @@ def main(keywords: list[str] | None = None) -> dict:
         finish_run(run_id, status="failed", item_count=0, note=str(e)[:500])
         print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
         return {"status": "failed", "error": str(e)[:300], "notices": []}
+    finally:
+        # 用完关 tab，避免浏览器堆积标签页吃内存卡死
+        try:
+            closed = wb.close_group("jiangsu-crawl", session=SESSION)
+            if closed:
+                print(f"[jiangsu-wb] closed {closed} tabs", flush=True)
+        except Exception:
+            pass
 
 
 if __name__ == "__main__":

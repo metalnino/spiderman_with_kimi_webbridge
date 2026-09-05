@@ -430,6 +430,19 @@ def _extract_ggzy_origin_and_fields(html: str) -> dict:
                 num = None
             if num is not None:
                 out["fields"]["amount"] = num * 10000 if nm.group(2) in ("万元", "万") else num
+    # 交易机构/招标人/采购人 → buyer（采购人，原发 b 页静态结构里就有）
+    m = re.search(r"(?:交易机构|招标人|采购人|采购单位)[：:]\s*([^;|<]{2,60})", full)
+    if m:
+        buyer = re.sub(r"\s+", " ", m.group(1)).strip()
+        if buyer and "原文链接" not in buyer:
+            out["fields"]["buyer"] = buyer[:120]
+    # 中标/成交供应商 → winner（结果公告的 b 页）
+    m = re.search(r"(?:中标供应商|成交供应商|中标人|中标单位)[：:]\s*([^\n|;；，,。、]{2,80})", full)
+    if m:
+        w = re.sub(r"[（(][^）)]*[）)]", " ", m.group(1)).strip()
+        w = re.sub(r"\s+", " ", w).strip()
+        if w and len(w) >= 4 and "原文链接" not in w:
+            out["fields"]["winner"] = w[:80]
     return out
 
 
@@ -596,6 +609,26 @@ def _err_text(e) -> str:
     return str(e)
 
 
+# 本轮详情抓取开过的 bridge 会话（用完统一关闭，防浏览器堆积标签页吃内存）
+_OPEN_BRIDGE_SESSIONS: set[str] = set()
+
+
+def close_bridge_tabs() -> int:
+    """关闭本轮详情抓取开过的所有 bridge tab，返回关闭数。"""
+    from crawl import webbridge_client as wb
+
+    closed = 0
+    for session in list(_OPEN_BRIDGE_SESSIONS):
+        try:
+            for t in wb.list_tabs(session=session):
+                if wb.close_tab(t.get("tabId"), session=session):
+                    closed += 1
+        except Exception:
+            pass
+    _OPEN_BRIDGE_SESSIONS.clear()
+    return closed
+
+
 def _bridge_page(source_id: str, detail_url: str, *, wait_sec: float = 10.0) -> dict:
     """WebBridge 真浏览器打开详情页，返回 {text, links, cookie, session} 或 {error}。"""
     from crawl import webbridge_client as wb
@@ -607,6 +640,7 @@ def _bridge_page(source_id: str, detail_url: str, *, wait_sec: float = 10.0) -> 
     nav = wb.navigate(detail_url, session=session, group_title="tenderfile", new_tab=True)
     if not nav.get("ok"):
         return {"error": f"bridge_navigate_failed: {_err_text(nav.get('error'))[:120]}"}
+    _OPEN_BRIDGE_SESSIONS.add(session)
     time.sleep(wait_sec + random.uniform(0, 3))
     page = _bridge_eval_json(session, BRIDGE_EXTRACT_JS)
     cookie = ""

@@ -40,6 +40,11 @@ def warm_source(source_id: str, http=None) -> dict:
         nav = webbridge_client.navigate(url, session=session, group_title=f"warm-{source_id}")
         time.sleep(2)
         exported = webbridge_client.export_document_cookie(session)
+        # 用完关 tab，避免暖场开的页面堆积吃内存
+        try:
+            webbridge_client.close_group(f"warm-{source_id}", session=session)
+        except Exception:
+            pass
         if exported.get("ok") and exported.get("cookie"):
             cookie_store.save_cookie_header(source_id, exported["cookie"], meta={"from": "warm"})
             if http is not None and hasattr(http, "load_stored_cookies"):

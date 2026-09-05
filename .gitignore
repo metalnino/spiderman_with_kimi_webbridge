@@ -42,6 +42,10 @@ data/collector_out_*.json
 data/web/webbridge_server.log
 data/web/webbridge_server.pid
 
+# 官方 kimi-webbridge daemon 下载产物（cdk.kimi.com，不入库）
+data/web/kimi-webbridge.exe
+data/web/kimi_install.ps1
+
 # P6 管道交接物（运行时产物，每轮出勤覆写/归档；消费者读磁盘不读 git）
 handoffs/
 

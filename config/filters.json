@@ -23,7 +23,8 @@
   "date": {
     "enabled": true,
     "start": "2026-07-01",
-    "end": "2026-08-31",
-    "default_mode": "since_last_run"
+    "end": null,
+    "default_mode": "since_last_run",
+    "$note": "end=null 表示滚动无上限（始终采集到『今天』）；只保留下限 2026-07-01，避免每天手动延窗口"
   }
 }
