@@ -1,0 +1,8 @@
+{
+  "$comment": "原发转爬路由：原发 URL 域名后缀 → 抓取模式。命中即认为可直取（is_http_fetchable / fetch_route_for）。新增原发域 = 在此加一条 suffix + 在 backfill 按 mode 加抓取函数（或复用 ccgp_http / ggzy_http）。",
+  "routes": [
+    { "suffix": "ccgp.gov.cn", "mode": "ccgp_http", "note": "中央政府采购网详情（parse_ccgp_detail）" },
+    { "suffix": "ggzy.gov.cn", "mode": "ggzy_http", "note": "全国公共资源交易平台 b 页" },
+    { "suffix": "jszwfw.gov.cn", "mode": "ggzy_http", "note": "江苏公共资源交易" }
+  ]
+}

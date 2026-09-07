@@ -82,6 +82,9 @@ def parse_ccgp_detail(html: str) -> dict:
             out["deadline"] = iso
         elif re.fullmatch(r"20\d{2}[-/]\d{1,2}[-/]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2})?)?", raw):
             out["deadline"] = raw[:19].replace("/", "-")
+    # 详情正文（前 2000 字），供 AI 字段抽取 / 原发寻址兜底
+    if t.strip():
+        out["summary"] = t.strip()[:2000]
     return out
 
 
@@ -139,7 +142,7 @@ def fetch_detail(source_id: str, detail_url: str) -> dict:
 
 
 def update_notice_detail(notice_id: int, fields: dict) -> None:
-    allowed = {"amount", "amount_text", "buyer", "agency", "project_code", "deadline", "open_time", "notice_type"}
+    allowed = {"amount", "amount_text", "buyer", "agency", "project_code", "deadline", "open_time", "notice_type", "winner"}
     sets: list[str] = []
     params: list = []
     for k, v in fields.items():

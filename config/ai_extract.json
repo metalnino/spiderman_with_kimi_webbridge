@@ -1,0 +1,9 @@
+{
+  "$comment": "AI 详情字段抽取配置（采集员详情补全用）。api_key 复用 config/ocr_api.json 的数字员工 DeepSeek key（本文件不存密钥）。enabled=false 或 ocr_api.json 缺 key 时自动回退纯规则抽取。model 若账号不支持 deepseek-chat，可改 deepseek-v4-flash-vision-exp（多模态同样吃文本）。",
+  "enabled": true,
+  "model": "deepseek-chat",
+  "timeout_sec": 25,
+  "max_tokens": 800,
+  "fields": ["buyer", "agency", "amount_text", "deadline", "winner"],
+  "note": "AI 只做「抽取」，不做「判断」；抽不到输出 null；任何失败降级回规则路径，绝不影响列表采集主流程。"
+}

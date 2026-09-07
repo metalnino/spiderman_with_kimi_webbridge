@@ -33,8 +33,43 @@ _NOISE_SPLIT_RE = re.compile(
     re.I,
 )
 
-# 可用既有 HTTP 能力直取的原发域（ccgp 详情 / ggzy b 页 / 江苏交易中心）
-HTTP_FETCHABLE_SUFFIXES = ("ccgp.gov.cn", "ggzy.gov.cn", "jszwfw.gov.cn")
+# 原发转爬路由配置（config/origin_fetch_routes.json）；缺配置时兜底
+ROUTES_PATH = ROOT / "config" / "origin_fetch_routes.json"
+_DEFAULT_ROUTES = [
+    {"suffix": "ccgp.gov.cn", "mode": "ccgp_http"},
+    {"suffix": "ggzy.gov.cn", "mode": "ggzy_http"},
+    {"suffix": "jszwfw.gov.cn", "mode": "ggzy_http"},
+]
+
+
+def _routes() -> list[dict]:
+    if ROUTES_PATH.exists():
+        try:
+            data = json.loads(ROUTES_PATH.read_text(encoding="utf-8"))
+            if isinstance(data.get("routes"), list):
+                return data["routes"]
+        except (OSError, json.JSONDecodeError):
+            pass
+    return _DEFAULT_ROUTES
+
+
+def _host(url: str) -> str:
+    return re.sub(r"^https?://", "", (url or "")).split("/")[0].lower()
+
+
+def fetch_route_for(url: str) -> str | None:
+    """原发 URL → 抓取模式（ccgp_http / ggzy_http）；不可直取返回 None。"""
+    host = _host(url)
+    if not host:
+        return None
+    for r in _routes():
+        suf = str(r.get("suffix") or "")
+        if suf and (host == suf or host.endswith("." + suf)):
+            return str(r.get("mode"))
+    # ccgp 区域站点（www.ccgp-jiangsu.gov.cn 等）与中央同平台、同详情结构
+    if "ccgp-" in host and host.endswith(".gov.cn"):
+        return "ccgp_http"
+    return None
 
 
 def origin_lines(text: str) -> list[str]:
@@ -90,8 +125,8 @@ def match_entity_map(title: str, entity: str | None = None) -> dict | None:
 
 
 def is_http_fetchable(url: str) -> bool:
-    host = re.sub(r"^https?://", "", (url or "")).split("/")[0].lower()
-    return any(host == s or host.endswith("." + s) for s in HTTP_FETCHABLE_SUFFIXES)
+    """是否可 HTTP 直取（兼容旧调用；等价 fetch_route_for(url) is not None）。"""
+    return fetch_route_for(url) is not None
 
 
 def resolve_origin(title: str, summary_text: str | None) -> dict:
