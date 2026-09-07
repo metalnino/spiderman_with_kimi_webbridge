@@ -1,0 +1,89 @@
+{
+  "$comment": "实体情报员契约 v1.0.0 —— 把采集员累积的公告库（notices）升维成实体情报图。确定性规则：抽取+聚合+粗估，不做投标/分包业务决策。周期粗估是提示非事实。",
+  "employee": "实体情报员",
+  "id": "entity_intel",
+  "contractVersion": "1.0.0",
+  "coreType": "rule",
+  "autonomyBudget": "deterministic",
+
+  "input": {
+    "dateRange":    { "type": "object",   "required": false, "description": "{ start, end }，分析的历史窗口；缺省全量累积库" },
+    "regionFilter": { "type": "string[]", "required": false, "description": "地区白名单（市或省名）；缺省不限" },
+    "platforms":    { "type": "string[]", "required": false, "description": "平台标识过滤；缺省全部" },
+    "extractWinners": { "type": "bool",   "required": false, "description": "是否抽取中标企业并回写 notices.winner；缺省 true" }
+  },
+
+  "output": {
+    "type": "object",
+    "description": "实体图：采购人实体 + 中标企业（供给侧）+ 供需关系边",
+    "properties": {
+      "entities": {
+        "type": "array",
+        "description": "采购人/招标人主体（需求侧客户），按主体名规范化后全国同名合并",
+        "items": {
+          "name":              { "type": "string",  "description": "主体展示名" },
+          "entityType":        { "type": "string",  "description": "buyer（当前仅采购人）" },
+          "city":              { "type": "string",  "nullable": true },
+          "province":          { "type": "string",  "nullable": true },
+          "noticeCount":       { "type": "integer", "description": "跨站折叠后的公告数" },
+          "lastNoticeAt":      { "type": "string",  "nullable": true, "format": "ISO8601" },
+          "nextBidHint":       { "type": "string",  "nullable": true, "description": "下次招标粗估提示（非事实）" },
+          "nextBidConfidence": { "type": "string",  "nullable": true, "enum": ["low", "medium", "high"] },
+          "medianCycleDays":   { "type": "integer", "nullable": true },
+          "nextBidDate":       { "type": "string",  "nullable": true, "description": "粗估下次日期" },
+          "officialChannels":  { "type": "string[]", "description": "原发官网链接" },
+          "originSources":     { "type": "string[]", "description": "原发来源单位/平台名" },
+          "serviceTags":       { "type": "array",   "description": "[{k,n}] 业务关键词计数" },
+          "noticeIds":         { "type": "array",   "description": "关联公告 id（最多 50）" }
+        }
+      },
+      "winners": {
+        "type": "array",
+        "description": "中标企业（供给侧/潜在分包商），仅从 result 阶段公告抽取，抽不到如实 null 不出现",
+        "items": {
+          "name":          { "type": "string", "description": "中标供应商名" },
+          "buyer":         { "type": "string", "nullable": true, "description": "采购人" },
+          "projectName":   { "type": "string", "nullable": true },
+          "projectKey":    { "type": "string", "nullable": true },
+          "noticeId":      { "type": "integer", "nullable": true },
+          "platform":      { "type": "string", "nullable": true },
+          "url":           { "type": "string", "nullable": true },
+          "wonAt":         { "type": "string", "nullable": true, "format": "ISO8601" },
+          "extractSource": { "type": "string", "enum": ["summary", "tenderfile_text", "title"] }
+        }
+      },
+      "relations": {
+        "type": "array",
+        "description": "供需关系边：buyer 的项目被 winner 中标",
+        "items": {
+          "buyer":      { "type": "string" },
+          "winner":     { "type": "string" },
+          "projectKey": { "type": "string", "nullable": true }
+        }
+      }
+    }
+  },
+
+  "config": {
+    "versioning": "git",
+    "rollback": "git checkout -- config/",
+    "files": [
+      { "path": "config/crm_config.json",      "schema": "crmConfig",    "owner": "improver", "description": "主体后缀 + 周期粗估阈值" },
+      { "path": "config/origin_platforms.json", "schema": "originMap",   "owner": "improver", "description": "主体→原发平台映射" }
+    ]
+  },
+
+  "observability": {
+    "reportFormat": "json",
+    "reportPath": "reports/intel-report.json",
+    "metrics": [
+      { "name": "entity_count",            "type": "integer", "description": "聚合出的采购人实体数" },
+      { "name": "winner_count",            "type": "integer", "description": "抽取到的中标企业数" },
+      { "name": "winner_extract_rate",     "type": "number",  "nullable": true, "description": "成功抽取/结果公告数；无结果公告为 null" },
+      { "name": "cycle_estimate_count",    "type": "integer", "description": "有下次招标粗估的实体数" },
+      { "name": "official_channel_count",  "type": "integer", "description": "有原发官网渠道的实体数" },
+      { "name": "notice_scanned",          "type": "integer", "description": "本次扫描的公告数" },
+      { "name": "elapsed_ms",              "type": "integer", "description": "本次耗时" }
+    ]
+  }
+}
