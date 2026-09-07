@@ -1,6 +1,6 @@
 # Synology Container Manager / docker compose
 # MySQL 用现有库（NAS 上 mysql8 容器，宿主机 127.0.0.1:13506 -> 3306）
-# network_mode: host 让容器直接访问宿主机 127.0.0.1 的 MySQL，并让台账直接监听 8765
+# 桥接网络 + ports 映射保持外网可访问；MySQL 经 host.docker.internal 访问宿主机（等效 127.0.0.1）
 services:
   spiderman:
     build: .
@@ -8,7 +8,6 @@ services:
     pull_policy: build
     container_name: spiderman_ledger
     restart: unless-stopped
-    network_mode: host
     env_file:
       - .env
     environment:
@@ -18,7 +17,11 @@ services:
       CRAWL_CRON_HOURS: "off"
       CRAWL_ON_START: "0"
       CRAWL_PAGES: "1"
-      MYSQL_HOST: "127.0.0.1"
+      MYSQL_HOST: "host.docker.internal"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    ports:
+      - "8765:8765"
     volumes:
       - ./.env:/app/.env:ro
       - ./data/sessions:/app/data/sessions
