@@ -66,6 +66,7 @@ a:hover{text-decoration:underline}
   <button data-tab="kw">词库</button>
   <button data-tab="captcha">验证码待办</button>
   <button data-tab="crm">CRM主体</button>
+  <button data-tab="intel">实体情报</button>
 </nav>
 
 <section id="monitor" class="active">
@@ -124,8 +125,22 @@ a:hover{text-decoration:underline}
 
 <section id="crm">
   <h2>CRM 主体（规范化去重 / 全国同名合并）</h2>
-  <table><thead><tr><th>名称</th><th>类型</th><th>主城</th><th>业务</th><th>公告数</th><th>最近</th></tr></thead>
+  <table><thead><tr><th>名称</th><th>类型</th><th>主城</th><th>业务</th><th>公告数</th><th>最近</th><th>下次招标粗估</th></tr></thead>
   <tbody id="crmBody"></tbody></table>
+</section>
+
+<section id="intel">
+  <h2>实体情报图（采购人实体 + 中标企业 + 供需关系）</h2>
+  <div class="cards" id="intelCards"></div>
+  <h3>采购人实体（下次招标粗估）</h3>
+  <table><thead><tr><th>实体</th><th>主城</th><th>公告数</th><th>最近</th><th>下次粗估</th><th>置信度</th><th>原发渠道</th></tr></thead>
+  <tbody id="intelEntityBody"></tbody></table>
+  <h3>中标企业（供给侧 / 潜在分包）</h3>
+  <table><thead><tr><th>中标企业</th><th>采购人</th><th>项目</th><th>中标时间</th><th>平台</th><th>抽取来源</th></tr></thead>
+  <tbody id="intelWinnerBody"></tbody></table>
+  <h3>供需关系</h3>
+  <table><thead><tr><th>采购人</th><th>→</th><th>中标企业</th><th>项目键</th></tr></thead>
+  <tbody id="intelRelBody"></tbody></table>
 </section>
 
 <div id="drawerMask" class="drawer-mask" style="display:none"></div>
@@ -338,8 +353,37 @@ async function loadCrm() {
   const d = await api('/api/entities?limit=100');
   document.getElementById('crmBody').innerHTML = (d.items||[]).map(e => {
     const tags = (e.service_tags||[]).map(t => '<span class="tag">'+esc(t.k)+'×'+esc(t.n)+'</span>').join('') || '-';
-    return '<tr><td>'+esc(e.name)+'</td><td>'+esc(e.entity_type||'-')+'</td><td>'+esc(e.city||'-')+'</td><td>'+tags+'</td><td>'+esc(e.notice_count)+'</td><td>'+esc(e.last_notice_at||'-')+'</td></tr>';
-  }).join('') || '<tr><td colspan=6>暂无</td></tr>';
+    return '<tr><td>'+esc(e.name)+'</td><td>'+esc(e.entity_type||'-')+'</td><td>'+esc(e.city||'-')+'</td><td>'+tags+'</td><td>'+esc(e.notice_count)+'</td><td>'+esc(e.last_notice_at||'-')+'</td><td>'+esc(e.next_bid_hint||'-')+'</td></tr>';
+  }).join('') || '<tr><td colspan=7>暂无</td></tr>';
+}
+
+async function loadIntel() {
+  let d;
+  try {
+    d = await api('/api/intel');
+  } catch (e) {
+    document.getElementById('intelCards').innerHTML = '<div class="card"><div class="hint">'+esc(e.message||e)+'</div></div>';
+    document.getElementById('intelEntityBody').innerHTML = '<tr><td colspan=7>暂无（先跑 python scripts/intel_run.py）</td></tr>';
+    document.getElementById('intelWinnerBody').innerHTML = '<tr><td colspan=6>暂无</td></tr>';
+    document.getElementById('intelRelBody').innerHTML = '<tr><td colspan=4>暂无</td></tr>';
+    return;
+  }
+  const ents = d.entities || [], wins = d.winners || [], rels = d.relations || [];
+  const withHint = ents.filter(e => e.nextBidHint).length;
+  document.getElementById('intelCards').innerHTML = [
+    ['实体数', ents.length], ['有下次粗估', withHint], ['中标企业', wins.length], ['供需关系', rels.length],
+  ].map(([k,v]) => '<div class="card"><div class="hint">'+esc(k)+'</div><b>'+esc(v)+'</b></div>').join('');
+  document.getElementById('intelEntityBody').innerHTML = ents.map(e => {
+    const ch = (e.officialChannels||[]).map(u => '<a href="'+esc(u)+'" target="_blank">'+esc(u.replace(/^https?:\/\//,'').slice(0,24))+'</a>').join('<br>') || '-';
+    const conf = e.nextBidConfidence ? '<span class="tag">'+esc(e.nextBidConfidence)+'</span>' : '-';
+    return '<tr><td>'+esc(e.name)+'</td><td>'+esc(e.city||'-')+'</td><td>'+esc(e.noticeCount)+'</td><td>'+esc(e.lastNoticeAt||'-')+'</td><td>'+esc(e.nextBidHint||'-')+'</td><td>'+conf+'</td><td style="font-size:12px">'+ch+'</td></tr>';
+  }).join('') || '<tr><td colspan=7>暂无实体</td></tr>';
+  document.getElementById('intelWinnerBody').innerHTML = wins.map(w =>
+    '<tr><td>'+esc(w.name)+'</td><td>'+esc(w.buyer||'-')+'</td><td>'+esc((w.projectName||'').slice(0,40))+'</td><td>'+esc(w.wonAt||'-')+'</td><td>'+esc(w.platform||'-')+'</td><td>'+esc(w.extractSource||'-')+'</td></tr>'
+  ).join('') || '<tr><td colspan=6>暂无中标企业（结果公告缺详情回填，先跑 collector_detail.py）</td></tr>';
+  document.getElementById('intelRelBody').innerHTML = rels.map(r =>
+    '<tr><td>'+esc(r.buyer)+'</td><td>→</td><td>'+esc(r.winner)+'</td><td style="font-size:11px">'+esc((r.projectKey||'').slice(0,12))+'</td></tr>'
+  ).join('') || '<tr><td colspan=4>暂无供需关系</td></tr>';
 }
 
 // ---------- P4 详情抽屉 ----------
@@ -390,6 +434,7 @@ function renderDrawer(d) {
   fields += dlRow('清洗状态', fmtDateTime((n.clean_status||'-')+(n.clean_reason?' ('+n.clean_reason+')':'')));
   fields += dlRow('项目名', fmtDateTime(n.project_name||''));
   fields += dlRow('原发来源', fmtDateTime(n.origin_source||''));
+  fields += dlRow('中标企业', fmtDateTime(n.winner||''));
   fields += dlRow('原文链接', links.join(' · ') || '-');
   fields += '</dl>';
 
@@ -428,7 +473,15 @@ function renderDrawer(d) {
     }).join('');
     tl = '<h3>项目时间线（'+(d.timeline||[]).length+' 条）</h3><ul class="tl">'+items+'</ul>';
   }
-  document.getElementById('dBody').innerHTML = fields + crm + backfill + tl;
+  let aiHtml = '';
+  if (n.ai_fields) {
+    try {
+      const af = typeof n.ai_fields === 'string' ? JSON.parse(n.ai_fields) : n.ai_fields;
+      const pairs = Object.entries(af || {}).filter(([, v]) => v).map(([k, v]) => '<span class="tag">' + esc(k) + ': ' + esc(v) + '</span>');
+      if (pairs.length) aiHtml = '<h3>AI 抽取字段</h3><div style="margin-top:4px">' + pairs.join(' ') + '</div>';
+    } catch (e) { /* ignore */ }
+  }
+  document.getElementById('dBody').innerHTML = fields + crm + backfill + aiHtml + tl;
   document.getElementById('dBody').onclick = async (ev) => {
     const tlA = ev.target.closest('a.tl-open');
     if (tlA) { ev.preventDefault(); openDrawer(Number(tlA.dataset.id)); return; }
@@ -468,7 +521,7 @@ function refillCities() {
   if (list.includes(keep)) city.value = keep;
 }
 
-const loaders = {monitor:loadMonitor, leads:loadLeads, clean:loadClean, kw:loadKw, captcha:loadCaptcha, crm:loadCrm};
+const loaders = {monitor:loadMonitor, leads:loadLeads, clean:loadClean, kw:loadKw, captcha:loadCaptcha, crm:loadCrm, intel:loadIntel};
 
 async function boot() {
   try {

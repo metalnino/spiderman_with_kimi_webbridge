@@ -2,11 +2,8 @@
 from __future__ import annotations
 
 import json
-import re
-import statistics
 import sys
 from collections import Counter, defaultdict
-from datetime import datetime, timedelta
 from html import escape
 from pathlib import Path
 
@@ -15,74 +12,17 @@ sys.path.insert(0, str(ROOT))
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from db import connect  # noqa: E402
+# 实体名规范化/合并/周期粗估统一收口到 entity_aggregate（情报员与 CRM 共用，避免逻辑分叉）
+from crawl.entity_aggregate import (  # noqa: E402
+    estimate_next_bid,
+    extract_entity,
+    normalize_entity_key,
+    parse_dt,
+    pick_display_name,
+)
 from crawl.ledger_data import _norm_title  # noqa: E402  (P4 折叠键：同题同城计一次)
 
 OUT_HTML = ROOT / "data" / "web" / "crm.html"
-CFG = json.loads((ROOT / "config" / "crm_config.json").read_text(encoding="utf-8"))
-
-# 合并用：去掉后比较的公司形态后缀（长的优先）
-_NORM_STRIP_SUFFIXES = (
-    "股份有限公司",
-    "有限责任公司",
-    "有限公司",
-    "集团有限公司",
-    "集团公司",
-    "集团",
-    "分公司",
-    "支公司",
-)
-
-
-def extract_entity(title: str) -> str | None:
-    t = re.sub(r"\s+", "", title or "")
-    t = re.split(r"(招标公告|采购公告|竞争性磋商|询比公告|谈判公告|中标|更正)", t)[0]
-    suffixes = sorted(CFG.get("entity_suffixes") or ["公司", "医院", "大学", "局", "中心", "委员会"], key=len, reverse=True)
-    best = None
-    for suf in suffixes:
-        idx = t.find(suf)
-        if idx < 0:
-            continue
-        end = idx + len(suf)
-        chunk = re.sub(r"^[\d\-—·\.、]+", "", t[max(0, end - 40) : end])
-        if len(chunk) >= 4 and (best is None or len(chunk) > len(best)):
-            best = chunk
-    return best
-
-
-def normalize_entity_key(name: str) -> str:
-    """全国合并键：去空白/括号噪声，统一常见公司后缀。"""
-    s = (name or "").strip()
-    s = s.replace("（", "(").replace("）", ")")
-    s = re.sub(r"\s+", "", s)
-    s = re.sub(r"[\(（][^\)）]{0,40}[\)）]", "", s)
-    s = s.replace("株式会社", "").replace("有限责任", "有限")
-    for suf in _NORM_STRIP_SUFFIXES:
-        if s.endswith(suf) and len(s) > len(suf) + 2:
-            s = s[: -len(suf)]
-            break
-    return s.casefold()
-
-
-def pick_display_name(names: list[str]) -> str:
-    """展示名取最长且含「公司/院/局」等更完整写法。"""
-    uniq = [n for n in names if n]
-    if not uniq:
-        return ""
-    return sorted(uniq, key=lambda x: (len(x), x), reverse=True)[0]
-
-
-def parse_dt(s) -> datetime | None:
-    if not s:
-        return None
-    if isinstance(s, datetime):
-        return s
-    s = str(s).replace("T", " ")
-    for fmt, n in (("%Y-%m-%d %H:%M:%S", 19), ("%Y-%m-%d %H:%M", 16), ("%Y-%m-%d", 10)):
-        try:
-            return datetime.strptime(s[:n], fmt)
-        except ValueError:
-            continue
-    return None
 
 
 def main():
@@ -135,13 +75,7 @@ def main():
                 provs = [h.get("province") for h in hist if h.get("province")]
                 province = max(set(provs), key=provs.count) if provs else None
                 last = times[-1] if times else None
-                next_hint = None
-                if len(times) >= 2:
-                    gaps = [(times[i] - times[i - 1]).days for i in range(1, len(times))]
-                    gaps = [g for g in gaps if 0 < g < 900]
-                    if gaps:
-                        med = int(statistics.median(gaps))
-                        next_hint = f"粗估间隔约{med}天；下次约{(last + timedelta(days=med)).date() if last else '-'}"
+                next_hint = estimate_next_bid(times)["hint"]
                 tag_counter = Counter()
                 for h in hist:
                     k = (h.get("keyword") or "").strip()

@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS notices (
   detail_status VARCHAR(32) NULL COMMENT '最近一次回填状态',
   original_url VARCHAR(1024) NULL COMMENT '原发站链接（转载行寻址结果）',
   origin_source VARCHAR(128) NULL COMMENT '原发来源（平台/单位名）',
+  winner VARCHAR(256) NULL COMMENT '中标/成交供应商（结果公告抽取，实体情报员回写）',
+  ai_fields JSON NULL COMMENT 'AI 详情字段抽取结果（采集员详情补全兜底）',
   created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   PRIMARY KEY (id),

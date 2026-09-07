@@ -15,6 +15,7 @@ summary / tenderfile_path / detail_status（成功=ok，失败=err:<摘要>）�
 """
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -25,8 +26,10 @@ sys.path.insert(0, str(ROOT / "scripts"))
 
 from db import connect  # noqa: E402
 
+from crawl import ai_extract  # noqa: E402
+from crawl import origin_search  # noqa: E402
 from crawl.detail import fetch_detail, update_notice_detail  # noqa: E402
-from crawl.origin import is_http_fetchable, resolve_origin  # noqa: E402
+from crawl.origin import fetch_route_for, resolve_origin  # noqa: E402
 from crawl.tenderfile import fetch_tenderfile  # noqa: E402
 
 FIELD_SOURCES = {"ccgp"}
@@ -58,7 +61,7 @@ def _load_row(notice_id: int) -> dict | None:
 def _save_result(notice_id: int, *, fields: dict | None = None,
                  summary: str | None = None, tenderfile_path: str | None = None,
                  detail_status: str | None = None, original_url: str | None = None,
-                 origin_source: str | None = None) -> None:
+                 origin_source: str | None = None, ai_fields: dict | None = None) -> None:
     if fields:
         update_notice_detail(notice_id, fields)
     sets: list[str] = []
@@ -78,6 +81,9 @@ def _save_result(notice_id: int, *, fields: dict | None = None,
     if origin_source is not None:
         sets.append("origin_source=%s")
         params.append(origin_source[:120])
+    if ai_fields is not None:
+        sets.append("ai_fields=%s")
+        params.append(json.dumps(ai_fields, ensure_ascii=False))
     if not sets:
         return
     params.append(notice_id)
@@ -111,6 +117,22 @@ def _parse_amount(amount_text: str | None) -> float | None:
     if unit in ("万元", "万"):
         return num * 10000
     return num
+
+
+_CN_DEADLINE_RE = re.compile(r"(20\d{2})\s*年\s*(\d{1,2})\s*月\s*(\d{1,2})\s*日")
+
+
+def _norm_deadline(v) -> str | None:
+    """AI 抽的 deadline 可能是「2026年8月27日」等中文格式 → 归一化为 MySQL DATETIME 可接受格式；失败返回 None（丢弃，不写坏列）。"""
+    s = str(v or "").strip()
+    if not s:
+        return None
+    if re.fullmatch(r"20\d{2}[-/]\d{1,2}[-/]\d{1,2}([ T]\d{1,2}:\d{2}(:\d{2})?)?", s):
+        return s[:19].replace("/", "-")
+    m = _CN_DEADLINE_RE.search(s)
+    if m:
+        return f"{m.group(1)}-{int(m.group(2)):02d}-{int(m.group(3)):02d} 00:00:00"
+    return None
 
 
 def find_notice_id_by_item(item: dict) -> int | None:
@@ -190,12 +212,13 @@ def backfill_notice(notice_id: int) -> dict:
     if sid in FIELD_SOURCES:
         fields = fetch_detail(sid, url)
         err = fields.pop("_error", None) if isinstance(fields, dict) else None
+        summary = fields.pop("summary", None) if isinstance(fields, dict) else None
         if not fields:
             reason = err or "fetch_failed"
             _save_result(notice_id, detail_status=f"err:{reason[:24]}")
             return {"ok": False, "error": reason, "source_id": sid}
-        _save_result(notice_id, fields=fields, detail_status="ok")
-        return {"ok": True, "source_id": sid, "fields": fields}
+        _save_result(notice_id, fields=fields, summary=summary, detail_status="ok")
+        return {"ok": True, "source_id": sid, "fields": fields, "summary": summary}
 
     if sid in SUMMARY_SOURCES:
         tf = fetch_tenderfile(sid, url)
@@ -223,19 +246,19 @@ def backfill_notice(notice_id: int) -> dict:
             origin_source = origin["platform"].get("name")
         # 原发优先：命中可 HTTP 直取的官方域且与当前页不同 → 从原发取字段/摘要，失败兜底聚合站结果
         origin_result = None
-        if original_url and original_url != url and is_http_fetchable(original_url):
-            if "ccgp" in original_url:
-                fields2 = fetch_detail("ccgp", original_url)
-                fields2.pop("_error", None)
-                if fields2:
-                    _save_result(notice_id, fields=fields2)
-                    origin_result = {"fields": fields2}
-            else:
-                tf2 = fetch_tenderfile("ggzy", original_url)
-                if tf2.get("ok") and tf2.get("tenderFile"):
-                    summary = tf2.get("summary") or (tf2["tenderFile"].get("text") or "")[:2000]
-                    path = tf2["tenderFile"].get("path")
-                    origin_result = {"summary": True, "tenderfile": True}
+        mode = fetch_route_for(original_url) if (original_url and original_url != url) else None
+        if mode == "ccgp_http":
+            fields2 = fetch_detail("ccgp", original_url)
+            fields2.pop("_error", None)
+            if fields2:
+                _save_result(notice_id, fields=fields2)
+                origin_result = {"fields": fields2}
+        elif mode == "ggzy_http":
+            tf2 = fetch_tenderfile("ggzy", original_url)
+            if tf2.get("ok") and tf2.get("tenderFile"):
+                summary = tf2.get("summary") or (tf2["tenderFile"].get("text") or "")[:2000]
+                path = tf2["tenderFile"].get("path")
+                origin_result = {"summary": True, "tenderfile": True}
         _save_result(
             notice_id,
             summary=summary,
@@ -257,3 +280,82 @@ def backfill_notice(notice_id: int) -> dict:
         }
 
     return {"ok": False, "error": f"unknown_source:{sid}", "source_id": sid}
+
+
+def _load_summary_fields(notice_id: int) -> dict | None:
+    """读取单条公告的 summary + 关键字段（供 AI 抽取兜底）。"""
+    conn = connect()
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, summary, buyer, agency, amount_text, deadline, winner FROM notices WHERE id=%s",
+                (notice_id,),
+            )
+            row = cur.fetchone()
+            return dict(row) if row else None
+    finally:
+        conn.close()
+
+
+def ai_enrich_notice(notice_id: int, *, fields=None) -> dict:
+    """对单条公告用 AI 抽取字段兜底（规则抓不到的字段）。
+
+    输入 summary（详情正文），输出结构化字段；只回填「规则还没拿到」的字段，
+    绝不用 AI 覆盖规则结果。返回 {ok, ai_fields, filled}；
+    无 summary / AI 禁用 / 抽取空 → 如实返回，不造假。
+    """
+    row = _load_summary_fields(notice_id)
+    if not row:
+        return {"ok": False, "error": "not_found"}
+    summary = row.get("summary") or ""
+    if not summary:
+        return {"ok": False, "error": "no_summary"}
+    ai = ai_extract.extract_fields(summary, fields)
+    if not ai:
+        _save_result(notice_id, ai_fields={})
+        return {"ok": False, "error": "ai_empty_or_disabled", "ai_fields": {}}
+    # 只补规则缺失的字段，不覆盖
+    updates = {}
+    for k, v in ai.items():
+        if v and not row.get(k):
+            if k == "deadline":
+                iso = _norm_deadline(v)
+                if not iso:
+                    continue  # 中文/非标日期归一化不了就丢弃，不写坏 DATETIME 列
+                updates[k] = iso
+            else:
+                updates[k] = v
+    if updates:
+        update_notice_detail(notice_id, updates)
+    _save_result(notice_id, ai_fields=ai)
+    return {"ok": True, "ai_fields": ai, "filled": sorted(updates.keys())}
+
+
+def enrich_from_ggzy(notice_id: int) -> dict:
+    """登录墙公告 → ggzy 站内检索 → b-page 转爬 → 回填采购人/金额/中标 + 原发。
+
+    聚合站（chinabidding/cebpub）详情在登录墙/验证码墙后，但同一公告在 ggzy（全国公共资源
+    交易平台）原发且开放。用标题去 ggzy 检索 → 匹配 → 抓 b-page（开放）→ 回填字段。
+    找不到匹配/抓取失败 → 如实返回，绝不编造。
+    """
+    row = _load_row(notice_id)
+    if not row:
+        return {"ok": False, "error": "not_found"}
+    kw = origin_search.search_keyword(row["title"])
+    results = origin_search.search_ggzy(kw, max_results=5)
+    match = origin_search.match_ggzy(row["title"], results)
+    if not match:
+        return {"ok": False, "error": "no_ggzy_match", "keyword": kw, "candidates": len(results)}
+    tf = fetch_tenderfile("ggzy", match["url"])
+    fields = tf.get("fields") or {}
+    updates = {k: v for k, v in fields.items() if v}
+    if updates:
+        update_notice_detail(notice_id, updates)
+    _save_result(
+        notice_id,
+        fields=updates or None,
+        original_url=match["url"],
+        origin_source=(tf.get("origin") or {}).get("source") or "全国公共资源交易平台",
+        detail_status=("ok" if tf.get("ok") else f"origin:{str(tf.get('error') or '')[:20]}"),
+    )
+    return {"ok": True, "keyword": kw, "matched_title": match["title"], "url": match["url"], "fields": fields}

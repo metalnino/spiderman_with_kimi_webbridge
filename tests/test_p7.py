@@ -293,5 +293,20 @@ class TestAutoBackfillPass(unittest.TestCase):
             self.assertEqual(bf.auto_backfill_pass([], ["ccgp"])["enabled"], False)
 
 
+class TestNormDeadline(unittest.TestCase):
+    def test_deadline_normalization(self):
+        from crawl.backfill import _norm_deadline
+
+        # 中文日期（AI 抽取常见）→ ISO
+        self.assertEqual(_norm_deadline("2026年8月27日"), "2026-08-27 00:00:00")
+        # 已是 ISO → 原样
+        self.assertEqual(_norm_deadline("2026-08-27 10:00:00"), "2026-08-27 10:00:00")
+        # 带中文日期但含时刻噪声 → 仍取日期
+        self.assertEqual(_norm_deadline("截止 2026年9月1日 10:00"), "2026-09-01 00:00:00")
+        # 非日期 → None（丢弃，不写坏 DATETIME 列）
+        self.assertIsNone(_norm_deadline("详见招标文件"))
+        self.assertIsNone(_norm_deadline(""))
+
+
 if __name__ == "__main__":
     unittest.main()

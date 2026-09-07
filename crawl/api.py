@@ -5,6 +5,7 @@ API contract kept unchanged so the front-end needs no modification.
 """
 from __future__ import annotations
 
+import json
 import os
 import sys
 from pathlib import Path
@@ -236,6 +237,21 @@ def captcha(limit: int = 40):
 @app.get("/api/entities")
 def entities(limit: int = 100):
     return data.entities(limit=limit)
+
+
+@app.get("/api/intel")
+def intel():
+    """实体情报员交接物（handoffs/intel/latest.json）直读，供「实体情报」页。"""
+    p = ROOT / "handoffs" / "intel" / "latest.json"
+    if not p.exists():
+        return JSONResponse(status_code=404, content={
+            "ok": False, "error": "no_intel_handoff",
+            "hint": "先跑 python scripts/intel_run.py 生成实体图",
+        })
+    try:
+        return json.loads(p.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return JSONResponse(status_code=500, content={"ok": False, "error": "handoff_broken"})
 
 
 @app.post("/api/captcha/open")

@@ -26,6 +26,9 @@ data/watermark/
 # 临时探针脚本与样本（调试残留，勿入库）
 scripts/_tmp_*
 data/web/zhaobiao_*
+# 探针/回填运行结果（调试产物，勿入库）
+data/detail_backfill_run.json
+data/qianlima_proxy_probe.json
 # 人工划码回灌的 Cookie（勿提交）
 data/sessions/
 

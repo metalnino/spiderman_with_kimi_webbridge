@@ -50,6 +50,8 @@ def main():
                 # P5：原发寻址
                 ("original_url", "ALTER TABLE notices ADD COLUMN original_url VARCHAR(1024) NULL COMMENT '原发站链接（转载行寻址结果）'"),
                 ("origin_source", "ALTER TABLE notices ADD COLUMN origin_source VARCHAR(128) NULL COMMENT '原发来源（平台/单位名）'"),
+                ("winner", "ALTER TABLE notices ADD COLUMN winner VARCHAR(256) NULL COMMENT '中标/成交供应商（结果公告抽取）'"),
+                ("ai_fields", "ALTER TABLE notices ADD COLUMN ai_fields JSON NULL COMMENT 'AI 详情字段抽取结果（兜底）'"),
             ]:
                 if not column_exists(cur, "notices", col):
                     cur.execute(ddl)
