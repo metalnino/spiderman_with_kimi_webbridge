@@ -37,11 +37,41 @@ def call(action: str, args: dict | None = None, *, session: str = "spiderman", t
         return {"ok": False, "error": {"code": "unreachable", "message": str(e)[:300]}}
 
 
+def _err_msg(e) -> str:
+    if isinstance(e, dict):
+        return str(e.get("message") or e.get("code") or "")
+    return str(e or "")
+
+
+def _open_chrome_window() -> bool:
+    """拉起一个 Chrome 窗口（Chrome 进程在但无窗口时，扩展无法建 tab）。"""
+    import subprocess
+
+    exe = _first_existing(CHROME_CANDIDATES)
+    if not exe:
+        return False
+    kwargs = {}
+    if hasattr(subprocess, "DETACHED_PROCESS"):
+        kwargs["creationflags"] = subprocess.DETACHED_PROCESS
+    try:
+        subprocess.Popen([exe, "--no-proxy-server"], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs)
+        return True
+    except Exception:
+        return False
+
+
 def navigate(url: str, *, session: str, group_title: str | None = None, new_tab: bool = True) -> dict:
     args: dict[str, Any] = {"url": url, "newTab": new_tab}
     if group_title:
         args["group_title"] = group_title
-    return call("navigate", args, session=session, timeout=45)
+    r = call("navigate", args, session=session, timeout=45)
+    # 扩展报 "No current window"（Chrome 进程在但没开窗）→ 拉起窗口后重试一次
+    if not r.get("ok") and "no current window" in _err_msg(r.get("error")).lower():
+        if _open_chrome_window():
+            time.sleep(4)
+            r = call("navigate", args, session=session, timeout=45)
+    return r
 
 
 def evaluate(code: str, *, session: str) -> dict:
