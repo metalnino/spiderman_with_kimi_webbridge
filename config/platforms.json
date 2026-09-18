@@ -99,6 +99,18 @@
     "proxy": null
   },
   {
+    "id": "szexgrp",
+    "name": "深圳阳光采购平台",
+    "enabled": true,
+    "route": "http",
+    "params": {
+      "list_api": "https://ygcg.szexgrp.com/api/v1/trade/content/page",
+      "channel_id": 4161,
+      "site_id": 216
+    },
+    "proxy": null
+  },
+  {
     "id": "rccchina",
     "name": "瑞达恒(标慧帮)",
     "enabled": false,

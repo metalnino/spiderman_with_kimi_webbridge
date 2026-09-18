@@ -38,7 +38,7 @@ FIELD_SOURCES = {"ccgp"}
 #   yfbzb=http（一级直通详情正文）、qianlima=bridge（bid-<id>.html 419→桥）、tgnet=bridge（项目详情桥渲染）
 SUMMARY_SOURCES = {
     "ggzy", "jsggzy", "jiangsu_zhaobiao", "cebpub", "chinabidding",
-    "yfbzb", "qianlima", "tgnet",
+    "yfbzb", "qianlima", "tgnet", "szexgrp",
 }
 # 原发寻址只对「可能转载」的聚合站行做（ccgp/yfbzb 自身即原发；tgnet/qianlima 列表型无需寻址）
 AGGREGATOR_SOURCES = {"chinabidding", "cebpub", "ggzy", "jsggzy", "jiangsu_zhaobiao"}

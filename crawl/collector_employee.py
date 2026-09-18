@@ -91,7 +91,55 @@ BROWSER_ROUTES = {
 }
 
 
-def _run_platform(pid: str, keywords: list[str], max_pages: int) -> dict:
+def _bridge_wait_sec() -> int:
+    """桥掉线时等待自愈的上限秒数（默认 300；SPIDER_BRIDGE_WAIT_SEC 覆盖，0=不等）。"""
+    v = os.environ.get("SPIDER_BRIDGE_WAIT_SEC")
+    if v is not None and str(v).strip().isdigit():
+        return max(0, int(v))
+    return 300
+
+
+def _wait_bridge_ready(pid: str, state: dict, *, interval: float = 15.0, ensure_wait: float = 30.0) -> dict:
+    """等桥自愈：反复 ensure_bridge（起 daemon/开浏览器/等扩展），最多等 _bridge_wait_sec()。
+
+    口径（用户要求）：**爬虫不因桥断而直接放弃** —— 桥掉线时等它恢复，恢复即继续采集；
+    只有整轮等待超时才如实失败（下一轮调度再试）。同一轮里若已判定不可用（gave_up），
+    后续 webbridge 源直接跳过，不再各自重复等待（避免 N 个源 × 等待上限）。
+    """
+    from crawl import webbridge_client as wb
+
+    if state.get("gave_up"):
+        return {"ok": False, "skipped": True, "error": "bridge_gave_up_this_run"}
+    # 保活进程若已死，顺手重新拉起（解「守护者自己挂了没人管」；scripts/ 已在 sys.path 上）
+    try:
+        import wb_bridge  # noqa: PLC0415
+
+        wb_bridge.ensure_daemon()
+    except Exception:  # noqa: BLE001 —— 拉保活失败不影响本函数继续等桥
+        pass
+    limit = _bridge_wait_sec()
+    deadline = time.time() + limit
+    attempts = 0
+    last: dict = {}
+    while True:
+        attempts += 1
+        try:
+            last = wb.ensure_bridge(wait_sec=ensure_wait) or {}
+        except Exception as e:  # noqa: BLE001
+            last = {"bridge": False, "extensions": 0, "error": str(e)[:160]}
+        if last.get("bridge") and int(last.get("extensions") or 0) >= 1:
+            print(f"[collector] webbridge ready for {pid}（第 {attempts} 次尝试）", flush=True)
+            state["ready"] = True
+            return {"ok": True, "attempts": attempts, "last": last}
+        if time.time() >= deadline:
+            state["gave_up"] = True
+            print(f"[collector] webbridge 等待 {limit}s 仍未就绪（{pid}）: {str(last)[:200]}", flush=True)
+            return {"ok": False, "attempts": attempts, "waited_s": limit, "last": last}
+        print(f"[collector] webbridge 未就绪（{pid}），{interval:.0f}s 后重试（已试 {attempts} 次）", flush=True)
+        time.sleep(interval)
+
+
+def _run_platform(pid: str, keywords: list[str], max_pages: int, bridge_state: dict | None = None) -> dict:
     """平台→执行路径路由。统一返回 {status, error, notices:[dict], raw_total, run_id}。"""
     route = BROWSER_ROUTES.get(pid)
     if route and pid == "qianlima" and proxy_for(pid):
@@ -101,13 +149,14 @@ def _run_platform(pid: str, keywords: list[str], max_pages: int) -> dict:
     if not route:
         return runner.run_source(pid, keywords=keywords, max_pages=max_pages)
     if route["route"] == "webbridge":
-        # 一键开桥（幂等）：桥服务/浏览器/扩展三件套自动就位，不再依赖人工打开
-        from crawl import webbridge_client as wb
-
-        try:
-            wb.ensure_bridge()
-        except Exception as e:  # noqa: BLE001 —— 开桥失败不炸整轮，由下游如实报 not_available
-            print(f"[collector] webbridge ensure_bridge failed: {e}", flush=True)
+        # 桥自愈（幂等）：起 daemon/浏览器/等扩展；**掉线时等它恢复，不直接放弃**
+        wres = _wait_bridge_ready(pid, bridge_state if bridge_state is not None else {})
+        if not wres.get("ok"):
+            return {
+                "status": "failed",
+                "error": f"webbridge_not_ready({wres.get('error') or 'timeout'})",
+                "notices": [], "raw_total": None, "run_id": None,
+            }
     import importlib
 
     try:
@@ -533,11 +582,12 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
     empty_platforms: list[str] = []
     collected: list = []
     new_notices: list[dict] = []  # 本轮去重后真正新增的原始通知（供完成钩子/简报邮件用）
+    bridge_state: dict = {}  # 桥状态：ready=已就绪；gave_up=本轮等待超时（后续 webbridge 源跳过）
 
     for pid in run_list:
         existing = _existing_hashes(pid)
         try:
-            res = _run_platform(pid, norm["keywords"], max_pages)
+            res = _run_platform(pid, norm["keywords"], max_pages, bridge_state)
         except Exception as e:  # noqa: BLE001 —— 内核意外失败也要闭环上报，不能炸掉整轮
             res = {
                 "source_id": pid, "run_id": None, "status": "error",
@@ -658,6 +708,18 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
             "detail_fetch_success_rate 口径：成功/尝试；本轮无尝试时为 null（不编 0）。详情按平台路由：ccgp=HTTP、ggzy/jsggzy=ggzy b 页 HTTP、chinabidding/jiangsu=WebBridge（附件带登录门时如实 null、摘要尽力填充）、cebpub=桥内尝试（vaptcha 未过如实报并登记待办）。",
         ],
     }
+
+    # 桥状态入报告：ready=本轮桥就绪（WebBridge 源可采）；gave_up=等待超时（webbridge 源本轮跳过，下轮再试）
+    report["webbridge"] = {
+        "ready": bool(bridge_state.get("ready")),
+        "gave_up": bool(bridge_state.get("gave_up")),
+        "wait_sec": _bridge_wait_sec(),
+    }
+    if bridge_state.get("gave_up"):
+        report["notes"].append(
+            f"WebBridge 桥本轮等待 {_bridge_wait_sec()}s 仍未就绪（daemon/扩展），webbridge 源已跳过；"
+            "爬虫不会因此停摆（HTTP 源照常），下轮调度自动重试。"
+        )
 
     window_note = _window_note(filters)
     if window_note:

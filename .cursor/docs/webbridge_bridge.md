@@ -1,33 +1,52 @@
-# WebBridge 本地桥服务端（127.0.0.1:10086）
+# WebBridge 本地桥（127.0.0.1:10086）
 
 ## 一句话
 
-「打开 webbridge」= 启动本机桥服务端（标准库脚本，零安装）+ 浏览器里 Kimi WebBridge 扩展自动连上。
-Chrome 和 Edge 均已装扩展（Chrome=v1.11.5），无需再装任何东西。
+「打开 webbridge」= 启动**官方 daemon**（`~/.kimi-webbridge/bin/kimi-webbridge.exe`）+ 浏览器里 Kimi 扩展自动连上。
+
+> **2026-09-18 换桥（重要）**：桥服务端从旧 Python 脚本 `scripts/webbridge_server.py`（只服务 `/command`）
+> 换成**官方 daemon**（服务 `/status`）。旧脚本**已弃用，不能再让它占 10086** ——
+> 它一占，官方 daemon 起不来、扩展连不上，表现为**所有 WebBridge 源静默 0 条**
+> （2026-09-18 江苏站空跑 47 分钟就是此因，详见 changelog）。
 
 ## 架构
 
 - 爬虫（crawl/webbridge_client.py）→ HTTP POST http://127.0.0.1:10086/command
-- 桥服务端（scripts/webbridge_server.py）→ WebSocket ws://127.0.0.1:10086/ws
-- Kimi WebBridge 扩展（Chrome/Edge，MV3 + chrome.debugger）→ 驱动真实浏览器执行 navigate/evaluate/list_tabs 等
-- 扩展为 WS 客户端：浏览器开着就会自动连接；断开后每 30s 对账自动重连（无需点扩展图标）
+- **官方 daemon**（`kimi-webbridge.exe`，v2.0.15）→ WebSocket；扩展为 WS 客户端，浏览器开着自动连
+- Kimi 扩展（Chrome，MV3 + chrome.debugger）→ 驱动真实浏览器执行 navigate/evaluate/cdp 等
+- 状态：GET http://127.0.0.1:10086/**status** → `{running, extension_connected, extension_version, ...}`
 
-## 启动 / 停止（一键，标准能力，勿再逆向）
+## 可用性判定（严格）
 
-**日常不需要手工操作**：采集员（crawl/collector_employee.py）跑 webbridge 源前会自动调用
-ensure_bridge() —— 桥服务没起就起、浏览器没开就开、等扩展连上，全自动、幂等。
+`wb.available()` = **daemon 在线 且 `extension_connected=true`**。
+只看端口（旧实现）会在扩展掉线时误报「可用」→ 采集源每词空跑、最后 0 条却当正常返回。
 
-手工运维一条命令（scripts/wb_bridge.py）：
+## 启动 / 停止 / 保活（一键，标准能力，勿再逆向）
+
+**日常不需要手工操作**：采集员跑 webbridge 源前会**等桥就绪**（`_wait_bridge_ready`：掉线时等它恢复，默认上限 `SPIDER_BRIDGE_WAIT_SEC`=300s，恢复即继续；HTTP 源不受影响）。
 
 ```
-python scripts/wb_bridge.py status    # 桥 + 扩展连接状态
-python scripts/wb_bridge.py start     # 起桥服务 + 开浏览器 + 等扩展（缺啥补啥，幂等）
-python scripts/wb_bridge.py stop      # 停桥服务（pidfile）
+python scripts/wb_bridge.py status         # 桥 + 扩展连接状态
+python scripts/wb_bridge.py start          # 起 daemon + 开浏览器 + 等扩展（一次性，缺啥补啥）
+python scripts/wb_bridge.py stop           # 停桥
+python scripts/wb_bridge.py watch          # 常驻保活：每 120s 巡检，掉了自动拉起（单例，写心跳）
+python scripts/wb_bridge.py ensure-daemon   # 确保保活进程在跑（心跳判断；死了就后台拉起）
 ```
 
-兜底：Windows 任务 SpidermanWebBridge（登录自启，长驻）。
+**保活三层（口径："wb 不该出现挂掉的状态"）**：
 
-状态自检：GET http://127.0.0.1:10086/ → {ok:true, extensions_connected:N}；N≥1 即桥通。
+1. 常驻 `watch`（Windows 任务 SpidermanWebBridge 的动作）做细粒度自愈；每轮写心跳
+   `data/web/wb_watch_heartbeat.json`；**单次巡检异常绝不杀死保活**；**单例**（心跳新鲜即退出）。
+2. `ensure-daemon` 解「守护者自己挂了没人管」：心跳新鲜 → no-op，陈旧 → 后台 detached 重拉；
+   采集员每次跑会调它。
+3. 采集时 `_wait_bridge_ready` 再等一道。
+
+> 为什么不只靠常驻守护进程：**谁来守护守护者？** 不依赖"改任务触发器"（需提权，实测被拒），
+> 用「心跳 + 按需拉起」让任意调用点都能自愈。
+
+## 故障恢复（实测）
+
+杀 `kimi-webbridge.exe` → 保活 **106 秒**自动拉起并恢复（巡检间隔 120s，故一个周期内）。
 
 ## 协议（自扩展 background.js v1.11.5 逆向，供维护）
 

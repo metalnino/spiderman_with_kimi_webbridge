@@ -356,7 +356,7 @@ class TestConfigLayer(unittest.TestCase):
         d = source_config_drift()
         self.assertTrue(d.get("has_platforms"), "platforms.json 应存在")
         self.assertFalse(d.get("drifted"), f"源站启用口径漂移: {d}")
-        self.assertEqual(len(enabled_source_ids()), 9)
+        self.assertEqual(len(enabled_source_ids()), 10)  # 十站运行（新增 szexgrp 深圳阳光采购）
 
     def test_all_enabled_sources_have_backfill_route(self):
         from crawl.sources import enabled_source_ids
@@ -473,7 +473,7 @@ class TestEnsureBridge(unittest.TestCase):
         from crawl import webbridge_client as wb
 
         with mock.patch.object(wb, "_bridge_status", return_value={"up": True, "extensions": 1}), \
-             mock.patch.object(wb, "_spawn_server") as sp, \
+             mock.patch.object(wb, "_start_official_daemon") as sp, \
              mock.patch.object(wb, "_open_browser_if_needed") as ob:
             res = wb.ensure_bridge()
         self.assertTrue(res["bridge"])
@@ -493,14 +493,14 @@ class TestEnsureBridge(unittest.TestCase):
                 return {"up": False, "extensions": 0}
             return {"up": True, "extensions": 0 if calls["n"] < 3 else 1}
         with mock.patch.object(wb, "_bridge_status", side_effect=status), \
-             mock.patch.object(wb, "_spawn_server", return_value=True), \
+             mock.patch.object(wb, "_start_official_daemon", return_value=True), \
              mock.patch.object(wb, "_open_browser_if_needed", return_value="C:\\fake\\chrome.exe"), \
              mock.patch.object(wb.time, "sleep"), \
              mock.patch.object(wb.time, "time", return_value=10**9):
             res = wb.ensure_bridge(wait_sec=1)
         self.assertTrue(res["bridge"])
         self.assertEqual(res["extensions"], 1)
-        self.assertIn("spawn_server", res["actions"])
+        self.assertIn("start_daemon", res["actions"])
         self.assertTrue(any("chrome" in a for a in res["actions"]))
 
     def test_collector_routes_webbridge_opens_bridge_first(self):
@@ -1102,6 +1102,48 @@ class TestCaptchaOcr(unittest.TestCase):
             state = tf._jiangsu_bridge_login_ocr("u1", "p1")
         self.assertEqual(state, "ok")
         ocr.assert_called_once_with(b"fake-captcha-image")
+
+
+class _FakeStatusResp:
+    def __init__(self, payload):
+        self._data = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *a):
+        return False
+
+    def read(self):
+        return self._data
+
+
+class TestBridgeAvailable(unittest.TestCase):
+    """桥可用判定：必须 daemon 在线 **且** 扩展已连接。
+
+    旧实现只看端口（连 HTTPError 都算 True）→ 扩展掉线误报可用，
+    WebBridge 源就会每词空跑、最后 0 条却当成正常返回。
+    """
+
+    def test_extension_connected(self):
+        from crawl import webbridge_client as wb
+
+        with mock.patch("urllib.request.urlopen",
+                        return_value=_FakeStatusResp({"running": True, "extension_connected": True})):
+            self.assertTrue(wb.available())
+
+    def test_extension_disconnected_is_not_available(self):
+        from crawl import webbridge_client as wb
+
+        with mock.patch("urllib.request.urlopen",
+                        return_value=_FakeStatusResp({"running": True, "extension_connected": False})):
+            self.assertFalse(wb.available())  # 旧实现会误报 True（这就是 47 分钟空跑的源头）
+
+    def test_daemon_down_is_not_available(self):
+        from crawl import webbridge_client as wb
+
+        with mock.patch("urllib.request.urlopen", side_effect=Exception("conn refused")):
+            self.assertFalse(wb.available())
 
 
 if __name__ == "__main__":

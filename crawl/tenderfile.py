@@ -33,7 +33,7 @@ import time
 import zipfile
 from html import unescape
 from pathlib import Path
-from urllib.parse import urlencode, urljoin, urlparse
+from urllib.parse import quote, urlencode, urljoin, urlparse
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
@@ -54,6 +54,7 @@ DETAIL_MODES = {
     "yfbzb": "http",
     "qianlima": "bridge",  # 详情 bid-<id>.html 419 反爬，桥渲染
     "tgnet": "bridge",  # 项目详情页桥渲染
+    "szexgrp": "szexgrp_http",  # 详情页 JS 壳，正文走 /api/v1/rhgw/szjy/detail?sectionCode=
     "rccchina": "blocked_regwall",  # 注册墙（手机号+短信验证码），三级不可直取
 }
 
@@ -1128,6 +1129,65 @@ def fetch_detail_via_bridge(source_id: str, detail_url: str) -> dict:
     return out
 
 
+SZEXGRP_DETAIL_API = "https://ygcg.szexgrp.com/api/v1/rhgw/szjy/detail"
+
+
+def _fetch_szexgrp_http(detail_url: str, http: HttpSession) -> dict:
+    """深圳阳光采购：详情页是 JS 壳，正文走详情接口 ?sectionCode=<bidSectionNumber>。
+
+    返回 {ok, error, summary, tenderFile, fields?}，字段同其它模式；失败如实返回。
+    """
+    out: dict = {"ok": False, "error": None, "summary": None, "tenderFile": None}
+    m = re.search(r"bidSectionNumber=([^&]+)", detail_url or "")
+    if not m:
+        out["error"] = "szexgrp_no_section_code"
+        return out
+    section = m.group(1)
+    api = f"{SZEXGRP_DETAIL_API}?sectionCode={quote(section)}"
+    try:
+        data = http.get_json(api, headers={"Referer": detail_url, "Accept": "application/json"})
+    except Exception as e:  # noqa: BLE001
+        out["error"] = f"szexgrp_detail_failed: {str(e)[:200]}"
+        return out
+    if not isinstance(data, dict) or data.get("code") != 200:
+        out["error"] = f"szexgrp_detail_code:{data.get('code') if isinstance(data, dict) else '?'}"
+        return out
+    notices = ((data.get("data") or {}).get("noticeList")) or []
+    if not notices or not isinstance(notices[0], dict):
+        out["error"] = "szexgrp_detail_empty"
+        return out
+    rec = notices[0]
+    html = rec.get("noticeContent") or ""
+    full = _plain(html) if html else ""
+    if not full.strip():
+        full = str(rec.get("bidSectionName") or "").strip()
+    if not full.strip():
+        out["error"] = "szexgrp_no_content"
+        return out
+    out["summary"] = full[:2000]
+    fields: dict = {}
+    if rec.get("bidSectionNumber"):
+        fields["project_code"] = rec["bidSectionNumber"]
+    m2 = re.search(r"(?:采购人|招标人|采购单位|建设单位|采购单位名称)[：:]\s*([^\s，,。;；|]{2,60})", full)
+    if m2:
+        fields["buyer"] = m2.group(1).strip()
+    m3 = re.search(r"(?:预算金额|采购预算|最高限价|成交金额|中标金额)[：:]\s*([\d,\.]+\s*(?:万元|元|万)?)", full)
+    if m3:
+        at = m3.group(1).strip()
+        fields["amount_text"] = at
+        nm = re.match(r"([\d,\.]+)\s*(万元|元|万)?$", at)
+        if nm:
+            try:
+                num = float(nm.group(1).replace(",", ""))
+                fields["amount"] = num * 10000 if nm.group(2) in ("万元", "万") else num
+            except ValueError:
+                pass
+    if fields:
+        out["fields"] = fields
+    out["ok"] = True
+    return out
+
+
 def fetch_tenderfile(source_id: str, detail_url: str, *, http: HttpSession | None = None) -> dict:
     """详情页 → 附件发现 → 下载 → 正文清洗（按 DETAIL_MODES 路由）。
 
@@ -1145,6 +1205,8 @@ def fetch_tenderfile(source_id: str, detail_url: str, *, http: HttpSession | Non
         return out
     if mode == "ggzy_http":
         return _fetch_ggzy_http(detail_url, http or HttpSession(source_id), source_id=source_id)
+    if mode == "szexgrp_http":
+        return _fetch_szexgrp_http(detail_url, http or HttpSession(source_id))
     if mode == "bridge":
         return fetch_detail_via_bridge(source_id, detail_url)
     if mode == "bridge_vaptcha":

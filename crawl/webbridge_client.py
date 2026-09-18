@@ -11,14 +11,18 @@ WB = "http://127.0.0.1:10086/command"
 
 
 def available(timeout: float = 2.0) -> bool:
+    """桥是否**真可用**：daemon 在线 **且** 浏览器扩展已连接。
+
+    旧实现只看端口连通（连 HTTPError 都算 True）→ 扩展掉线时误报「可用」：
+    WebBridge 采集源以为桥在，实际每个词都空跑，最后 0 条，
+    把「其实一条都没爬」掩盖成一次正常返回。这里必须严格判定。
+    """
     try:
-        urllib.request.urlopen("http://127.0.0.1:10086/command", timeout=timeout)
-        return True
-    except urllib.error.HTTPError:
-        # daemon up but method wrong → still available
-        return True
+        with urllib.request.urlopen("http://127.0.0.1:10086/status", timeout=timeout) as resp:
+            data = json.loads(resp.read().decode("utf-8"))
     except Exception:
         return False
+    return bool(data.get("running", True)) and bool(data.get("extension_connected"))
 
 
 def call(action: str, args: dict | None = None, *, session: str = "spiderman", timeout: int = 90) -> dict:

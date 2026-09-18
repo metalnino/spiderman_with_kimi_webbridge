@@ -81,6 +81,16 @@
     "method": "playwright",
     "note": "二级 Playwright：搜索 aspx 结果为 JS 加载；数据为工程项目信息(含阶段列)，如实入库"
   },
+  "szexgrp": {
+    "enabled": true,
+    "name": "深圳阳光采购平台",
+    "list_api": "https://ygcg.szexgrp.com/api/v1/trade/content/page",
+    "detail": "http",
+    "page_size": 20,
+    "release_days": 120,
+    "notice_types": ["采购公告", "变更公示", "候选人公示", "结果公示", "定标结果公示"],
+    "note": "HTTP 一级直通（POST JSON API，无登录/无验证码/无 WAF）；平台即深圳，city 固定=深圳；release_days=服务端时间窗(实测 1149→75条/30天)；notice_types=只收公开采购全周期（邀请函/合同续期公示/其他公示 不相关，丢）；详情页 /jyxxDetails.htm 是 JS 壳，正文走 /api/v1/rhgw/szjy/detail"
+  },
   "rccchina": {
     "enabled": false,
     "name": "瑞达恒(标慧帮)",

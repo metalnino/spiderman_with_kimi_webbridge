@@ -153,18 +153,33 @@ def main(keywords: list[str] | None = None) -> dict:
     all_notices: list[Notice] = []
     try:
         # 暖场：先访问首页（模拟真人浏览入口），随机停留
-        wb.navigate(HOME, session=SESSION, group_title="jiangsu-crawl", new_tab=True)
+        nav = wb.navigate(HOME, session=SESSION, group_title="jiangsu-crawl", new_tab=True)
+        if isinstance(nav, dict) and nav.get("ok") is False:
+            # 桥/扩展掉线：立即失败，不再对每个词空等 60s（原会 = 词数 × 60s）
+            raise RuntimeError(f"bridge_unavailable: {str(nav.get('error'))[:160]}")
         human_pause(2.0, 5.0)
+        empty_streak = 0
         for i, kw in enumerate(kws):
             if i > 0:
                 human_pause(3.0, 8.0)  # 关键词之间随机停顿，防连发限流
             # 复用同一标签页（new_tab=False），避免浏览器里堆积 16 个标签
-            wb.navigate(search_url(kw), session=SESSION, group_title="jiangsu-crawl", new_tab=False)
+            nav = wb.navigate(search_url(kw), session=SESSION, group_title="jiangsu-crawl", new_tab=False)
+            if isinstance(nav, dict) and nav.get("ok") is False:
+                # 桥/扩展掉线：立即停（自愈）。不检查的话会「0 结果还空等 42 词 × 60s ≈ 47 分钟」
+                print(f"[jiangsu-wb] 导航失败，提前停止: {str(nav.get('error'))[:120]}", flush=True)
+                break
             human_pause(1.0, 2.5)
             raw = wait_results()
             notices = parse_items(raw, kw)
             print(f"[jiangsu-wb] {kw} items={len(notices)}", flush=True)
             all_notices.extend(notices)
+            if not raw:
+                empty_streak += 1
+                if empty_streak >= 3:
+                    print(f"[jiangsu-wb] 连续 {empty_streak} 个词无结果 → 提前停止（原会空等 {len(kws)} 词 × 60s）", flush=True)
+                    break
+            else:
+                empty_streak = 0
             # 轻量模拟鼠标行为
             try:
                 wb.evaluate(MOUSE_JS, session=SESSION)

@@ -38,6 +38,12 @@ def _is_waf_block(err: str) -> bool:
     return any(m in s for m in ("418", "疑似恶意攻击", "cloudwaf"))
 
 
+def _is_bridge_down(err: str) -> bool:
+    """桥服务/扩展掉线（no_extension/unreachable）：与 418 一样应立即停手，不空跑剩余词。"""
+    s = (err or "").lower()
+    return any(m in s for m in ("no_extension", "unreachable", "bridge_unavailable", "bridge_navigate_failed"))
+
+
 def build_search_url(kw: str, page: int = 1) -> str:
     """与 HTTP 版 QianlimaSource._build_url 完全一致（同款搜索 API）。"""
     return QianlimaSource()._build_url(kw, page)
@@ -172,7 +178,10 @@ def main(keywords: list[str] | None = None) -> dict:
                 human_pause(3.0, 8.0)  # 词间随机停顿，防连发限流
             try:  # 单词语义隔离：一词失败不拖垮整轮，已采部分保留
                 # 复用同一标签页（new_tab 仅首个词），避免浏览器堆积 20 个标签
-                wb.navigate(search_page_url(kw), session=SESSION, group_title="qianlima-crawl", new_tab=(i == 0))
+                nav = wb.navigate(search_page_url(kw), session=SESSION, group_title="qianlima-crawl", new_tab=(i == 0))
+                if isinstance(nav, dict) and nav.get("ok") is False:
+                    # 桥/扩展掉线：转成异常走统一处理，避免每词都空跑一遍
+                    raise RuntimeError(f"bridge_unavailable: {str(nav.get('error'))[:160]}")
                 human_pause(2.0, 3.5)  # 等页面 JS/风控初始化
                 data = search_page(kw, page=1)
                 items = parse_payload(data, kw)
@@ -186,12 +195,10 @@ def main(keywords: list[str] | None = None) -> dict:
                 if first_err is None:
                     first_err = f"qianlima search failed: {str(e)[:200]}"
                 print(f"[qianlima-wb] {kw} error: {e}", flush=True)
-                if _is_waf_block(str(e)):
-                    # 站点级 418 硬拦截：立即停手，剩余词不再打（频控靠冷却阶梯不靠轰炸）；
-                    # 下轮调度仍会探 1 词做自愈探测，解封即恢复产出。
+                if _is_waf_block(str(e)) or _is_bridge_down(str(e)):
+                    # 418 站点级硬拦 / 桥掉线：立即停手，剩余词不再打（下轮再探做自愈）。
                     first_err = (
-                        f"qianlima waf_block(418 site-level, stopped after {i + 1}/{len(kws)} words): "
-                        f"{str(e)[:160]}"
+                        f"qianlima stop({i + 1}/{len(kws)} words): {str(e)[:160]}"
                     )
                     break
 
