@@ -1,7 +1,17 @@
-"""Kimi WebBridge 本地桥服务端（127.0.0.1:10086）—— 纯 Python 标准库，零安装。
+"""⚠️【已弃用 · 2026-09-18】不要再运行本脚本！
+
+桥服务端已换成**官方 daemon**：`~/.kimi-webbridge/bin/kimi-webbridge.exe`（服务 `/status`）。
+本脚本只服务 `/command`、**没有 `/status`**；一旦它占了 10086，官方 daemon 起不来、
+Kimi 扩展连不上，所有 WebBridge 源会**静默 0 条**（2026-09-18 江苏站空跑 47 分钟即此因）。
+启动/保活一律用：`python scripts/wb_bridge.py start|watch|ensure-daemon`。
+保留本文件仅为协议考古（v1.11.x 扩展自研桥），**勿再作为运行入口**。
+
+---
+
+Kimi WebBridge 本地桥服务端（127.0.0.1:10086）—— 纯 Python 标准库，零安装（历史实现）。
 
 背景：
-  本机 Chrome/Edge 已装「Kimi WebBridge」扩展（MV3，chrome.debugger 控真实浏览器）。
+  本机 Chrome 已装「Kimi」扩展（MV3，chrome.debugger 控真实浏览器）；**Edge 已弃用，统一走 Chrome**。
   扩展是 WS 客户端，会自动连 ws://127.0.0.1:10086/ws（storage 未关时默认开，每 30s 对账重连）。
   爬虫侧（crawl/webbridge_client.py）POST http://127.0.0.1:10086/command 发命令。
   本服务 = 两者之间的桥：HTTP 命令 → WS tool_call → 扩展执行 → tool_result → HTTP 响应。
@@ -231,7 +241,7 @@ class Handler(BaseHTTPRequestHandler):
             self._json({
                 "ok": True,
                 "service": "Kimi WebBridge local server",
-                "hint": "Chrome/Edge 里的 Kimi WebBridge 扩展会自动连上本服务的 /ws",
+                "hint": "Chrome 里的 Kimi 扩展会自动连上本服务的 /ws（本脚本已弃用，请用官方 daemon）",
                 "extensions_connected": len(ready),
             })
             return
@@ -260,7 +270,7 @@ class Handler(BaseHTTPRequestHandler):
         try:
             result = _send_tool(action, args)
         except RuntimeError as e:
-            self._json({"ok": False, "error": {"code": str(e), "message": "浏览器扩展未连接：请保持 Chrome/Edge 开着（扩展会自动连）"}}, 503)
+            self._json({"ok": False, "error": {"code": str(e), "message": "浏览器扩展未连接：请保持 Chrome 开着（扩展会自动连；本脚本已弃用）"}}, 503)
             return
         except TimeoutError as e:
             self._json({"ok": False, "error": {"code": "tool_timeout", "message": str(e)}}, 504)

@@ -109,14 +109,11 @@ def close_group(group_title: str, *, session: str = "spiderman", timeout: int = 
 
 # ---------------------------------------------------------------- 开桥（幂等自愈） ---
 
+# 只用 Chrome：Kimi 扩展装在 Chrome，Edge 已弃用（不得再出现 msedge/系统默认浏览器路径）
 CHROME_CANDIDATES = (
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
     r"C:\Users\27915\AppData\Local\Google\Chrome\Application\chrome.exe",
-)
-EDGE_CANDIDATES = (
-    r"C:\Program Files (x86)\Microsoft\Edge\Application\msedge.exe",
-    r"C:\Program Files\Microsoft\Edge\Application\msedge.exe",
 )
 
 
@@ -126,6 +123,29 @@ def _first_existing(paths) -> str | None:
         if os.path.isfile(p):
             return p
     return None
+
+
+def open_in_chrome(url: str) -> str | None:
+    """用 **Chrome** 打开 URL（绝不用 Edge / 系统默认浏览器）；返回 chrome.exe 路径，找不到返回 None。
+
+    铁律：本项目统一走 Chrome（Kimi 扩展装在那里，Edge 已弃用）。
+    验证码/滑块待办等"需要人看页面"的场景必须用它，而不是 webbrowser.open（后者走系统默认浏览器）。
+    """
+    import subprocess
+
+    exe = _first_existing(CHROME_CANDIDATES)
+    if not exe:
+        return None
+    kwargs: dict = {}
+    if hasattr(subprocess, "DETACHED_PROCESS"):
+        kwargs["creationflags"] = subprocess.DETACHED_PROCESS
+    try:
+        # Chrome 已在运行时：该命令只是在新标签页打开 url（沿用现有实例与配置）
+        subprocess.Popen([exe, url], stdin=subprocess.DEVNULL,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, **kwargs)
+    except Exception:  # noqa: BLE001
+        return None
+    return exe
 
 
 def _process_running(image: str) -> bool:

@@ -225,7 +225,7 @@ class TestCaptchaFlow(unittest.TestCase):
 
         tid = open_todo("cebpub", "https://example.com/captcha-test", "单元测试待办", "ut")
         with mock.patch("crawl.captcha_flow.webbridge_client.available", return_value=False), mock.patch(
-            "crawl.captcha_flow.webbrowser.open", return_value=True
+            "crawl.captcha_flow.webbridge_client.open_in_chrome", return_value=r"C:\fake\chrome.exe"
         ) as wb:
             out = open_for_human(tid)
         self.assertTrue(out.get("ok"))

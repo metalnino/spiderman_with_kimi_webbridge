@@ -2,7 +2,6 @@
 from __future__ import annotations
 
 import sys
-import webbrowser
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -58,21 +57,23 @@ def open_for_human(todo_id: int) -> dict:
     if wb_ok:
         nav = webbridge_client.navigate(url, session=session, group_title=f"captcha-{todo_id}")
         out["nav"] = {"ok": bool(nav.get("ok")), "raw": nav.get("error") or nav.get("data")}
-        # navigate timeout 仍可能已开页；再兜底系统浏览器
+        # navigate timeout 仍可能已开页；再兜底「用 Chrome 打开」（铁律：不走 Edge/系统默认浏览器）
         if not nav.get("ok"):
-            try:
-                webbrowser.open(url)
+            exe = webbridge_client.open_in_chrome(url)
+            if exe:
                 out["fallback_browser"] = True
-            except Exception as e:  # noqa: BLE001
-                out["fallback_browser_error"] = str(e)[:200]
+                out["fallback_browser_exe"] = exe
+            else:
+                out["fallback_browser_error"] = "chrome_not_found"
     else:
-        try:
-            webbrowser.open(url)
+        exe = webbridge_client.open_in_chrome(url)
+        if exe:
             out["fallback_browser"] = True
-            out["note"] = "WebBridge 未启动，已用系统浏览器打开"
-        except Exception as e:  # noqa: BLE001
+            out["fallback_browser_exe"] = exe
+            out["note"] = "WebBridge 未启动，已用 Chrome 打开"
+        else:
             out["ok"] = False
-            out["error"] = f"open_failed:{e}"
+            out["error"] = "open_failed:chrome_not_found"
     return out
 
 
