@@ -197,8 +197,10 @@ def main(keywords: list[str] | None = None) -> dict:
                 print(f"[qianlima-wb] {kw} error: {e}", flush=True)
                 if _is_waf_block(str(e)) or _is_bridge_down(str(e)):
                     # 418 站点级硬拦 / 桥掉线：立即停手，剩余词不再打（下轮再探做自愈）。
+                    # 错误串必须自证原因（waf_block / bridge_down），便于 crawl_runs.note 一眼定性。
+                    reason = "waf_block" if _is_waf_block(str(e)) else "bridge_down"
                     first_err = (
-                        f"qianlima stop({i + 1}/{len(kws)} words): {str(e)[:160]}"
+                        f"qianlima {reason} stop({i + 1}/{len(kws)} words): {str(e)[:160]}"
                     )
                     break
 

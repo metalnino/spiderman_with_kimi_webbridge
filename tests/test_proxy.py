@@ -52,14 +52,22 @@ class TestHttpSessionProxy(unittest.TestCase):
 
         from crawl.http_session import HttpSession
 
-        with mock.patch("crawl.http_session.proxy_for", return_value=None):
+        # 直连口径断言「有效代理映射为空」，而不是断言 handler 个数：
+        # build_opener 传入 ProxyHandler({}) 时，空 dict 不会生成 http_open/https_open，
+        # 只剩被 add_handler 跳过的 proxy_open ⇒ added=False ⇒ 该 handler 根本不进 opener.handlers。
+        # 因此个数断言（旧写法 len==1）是错的实现细节；真正要守的是「绝不跟随系统代理」。
+        # 这里把系统代理伪造成有值，若有人删掉 http_session 里显式直连的 ProxyHandler({})，
+        # build_opener 会补上默认 ProxyHandler（读 getproxies）→ 映射非空 → 本用例必红。
+        with mock.patch("crawl.http_session.proxy_for", return_value=None), \
+             mock.patch.object(urllib.request, "getproxies",
+                               return_value={"http": "http://127.0.0.1:7890", "https": "http://127.0.0.1:7890"}):
             s = HttpSession("qianlima")
         self.assertIsNone(s.proxy)
-        # urllib build_opener 默认自带一个 ProxyHandler；直连时不注入显式代理，
-        # 其内容跟随系统代理设置（本机可能配了系统代理），不做内容断言。
-        handlers = [h for h in s.opener.handlers if isinstance(h, urllib.request.ProxyHandler)]
-        self.assertEqual(len(handlers), 1)
-        self.assertNotEqual(handlers[0].proxies.get("http"), "http://127.0.0.1:7890")
+        effective: dict = {}
+        for h in s.opener.handlers:
+            if isinstance(h, urllib.request.ProxyHandler):
+                effective.update({k: v for k, v in h.proxies.items() if v})
+        self.assertEqual(effective, {}, "直连源站不得携带任何代理映射（更不得跟随系统代理）")
 
 
 class TestQianlimaRouteSwitch(unittest.TestCase):

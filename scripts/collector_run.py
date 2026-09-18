@@ -3,7 +3,7 @@
 用法:
   python scripts/collector_run.py                       # 无输入：用配置层默认（keywords.json/platforms.json/filters.json）
   python scripts/collector_run.py input.json            # 读契约 input JSON 文件
-  python scripts/collector_run.py -                     # 从 stdin 读契约 input JSON
+  python scripts/collector_run.py -                      # 从 stdin 读契约 input JSON
   python scripts/collector_run.py -o out.json ...       # output 数组同时落盘到指定路径
 
 stdout 打印 {ok, employee, implements, output, reportPath, metrics, handoffPath}；
@@ -15,25 +15,144 @@ stdout 打印 {ok, employee, implements, output, reportPath, metrics, handoffPat
 字段：{runId, implements, generatedAt, items}，items 与契约 output 同构（管道契约铁律）。
 环境变量 SPIDER_HANDOFF_DIR 可重定向（测试用）。
 
+启动自记录日志（2026-09-19 新增，入口黑盒问题的修复）：
+  logs/collector_run_<YYYYmmdd_HHMMSS>.log   # 本轮 stdout/stderr 全量 + 崩溃栈，保留最近 30 份
+  logs/collector_launch.json                 # 启动戳（pid/时间/cwd/argv/解释器/日志名）
+为什么需要：Windows 任务 SpidermanCollector 的动作是裸 `python.exe scripts\collector_run.py`，
+Task Scheduler 既不落 stdout，其 Operational 日志在本机也是关闭的（IsEnabled=False）——
+即进程一旦在启动阶段（重导入/配置装载）死掉就完全无痕。2026-09-18 22:00 那轮就是这样：
+Task 结果码 1、crawl_runs 零行、reports 与 handoffs 都停在 12:40、无崩溃事件，事后无法定位。
+日志在**任何重导入之前**安装，连「导入期死亡」也留证。
+环境变量 SPIDER_NO_RUN_LOG=1 关闭；SPIDER_LOG_DIR 可重定向（测试用）。
+
 退出码: 0 成功；2 契约 input 校验失败；1 其他错误。
 透传内核测试缝环境变量: SPIDER_MAX_PAGES / SPIDER_MAX_DETAIL / SPIDER_NO_RATE_LIMIT_RETRY / CCGP_BLOCK_COOLDOWN_SEC
 """
 from __future__ import annotations
 
 import argparse
+import faulthandler
 import json
 import os
 import sys
+import traceback
 from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+HANDOFF_DIR = Path(os.environ.get("SPIDER_HANDOFF_DIR") or (ROOT / "handoffs" / "collector"))
+
+# ---------------------------------------------------------------------------
+# 启动自记录（纯 stdlib，必须先于下面的重导入就位）
+# ---------------------------------------------------------------------------
+LOG_DIR = Path(os.environ.get("SPIDER_LOG_DIR") or (ROOT / "logs"))
+KEEP_RUN_LOGS = 30
+LOG_FILES: list = []
+
+
+class _Tee:
+    """把写往原流的每个 chunk 同时写进日志文件；原流被任务调度器丢弃也不丢证据。"""
+
+    def __init__(self, *streams):
+        self._streams = streams
+
+    def write(self, text):
+        for stream in self._streams:
+            try:
+                stream.write(text)
+            except Exception:  # noqa: BLE001 —— 观测流绝不反噬主流程
+                pass
+        return len(text)
+
+    def flush(self):
+        for stream in self._streams:
+            try:
+                stream.flush()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def isatty(self):
+        return False
+
+    def reconfigure(self, **kwargs):
+        return None
+
+    @property
+    def encoding(self):
+        return "utf-8"
+
+    @property
+    def errors(self):
+        return "replace"
+
+
+def _prune_run_logs() -> None:
+    try:
+        logs = sorted(LOG_DIR.glob("collector_run_*.log"))
+        for old in logs[:-KEEP_RUN_LOGS]:
+            try:
+                old.unlink()
+            except OSError:
+                pass
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _install_run_log() -> None:
+    """装 tee + 写启动戳。任何失败都不得挡住采集主流程。"""
+    if os.environ.get("SPIDER_NO_RUN_LOG") == "1":
+        return
+    try:
+        LOG_DIR.mkdir(parents=True, exist_ok=True)
+        run_log = LOG_DIR / f"collector_run_{datetime.now():%Y%m%d_%H%M%S}.log"
+        handle = open(run_log, "a", encoding="utf-8", errors="replace", buffering=1)
+        LOG_FILES.append(handle)
+        try:
+            faulthandler.enable(handle)  # 段错误/栈溢出等硬崩也留栈
+        except Exception:  # noqa: BLE001
+            pass
+        for name in ("stdout", "stderr"):
+            stream = getattr(sys, name, None)
+            if stream is None:
+                continue
+            if hasattr(stream, "reconfigure"):
+                try:
+                    stream.reconfigure(encoding="utf-8", errors="replace")
+                except Exception:  # noqa: BLE001
+                    pass
+            setattr(sys, name, _Tee(stream, handle))
+        (LOG_DIR / "collector_launch.json").write_text(
+            json.dumps(
+                {
+                    "pid": os.getpid(),
+                    "startedAt": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                    "cwd": str(Path.cwd()),
+                    "argv": sys.argv[1:],
+                    "executable": sys.executable,
+                    "logFile": run_log.name,
+                },
+                ensure_ascii=False,
+                indent=2,
+            ),
+            encoding="utf-8",
+        )
+        _prune_run_logs()
+    except Exception:  # noqa: BLE001
+        pass
+
+
+# 只有「直接运行」才装日志：被 import（例如 tests/test_pipeline.py 按路径加载）时保持零副作用。
+if __name__ == "__main__":
+    _install_run_log()
+    print(f"[collector_run] start {datetime.now():%Y-%m-%d %H:%M:%S} pid={os.getpid()} cwd={Path.cwd()}")
+
+# ---------------------------------------------------------------------------
+# 重导入（放在自记录之后：这一段的失败同样会落到本轮日志）
+# ---------------------------------------------------------------------------
 from crawl.collector_employee import IMPLEMENTS, IDENTITY, ContractInputError, run  # noqa: E402
 from crawl import mail_report  # noqa: E402
-
-HANDOFF_DIR = Path(os.environ.get("SPIDER_HANDOFF_DIR") or (ROOT / "handoffs" / "collector"))
 
 
 def _write_handoff(result: dict) -> str:
@@ -114,4 +233,19 @@ def main() -> int:
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    try:
+        code = main()
+    except SystemExit:
+        raise
+    except BaseException:  # noqa: BLE001 —— 兜底：任何未捕获异常都要留栈 + 明确退出码 1
+        traceback.print_exc()
+        print("[collector_run] FATAL 未捕获异常，栈见上方与本轮 log", file=sys.stderr, flush=True)
+        code = 1
+    finally:
+        for handle in LOG_FILES:
+            try:
+                handle.flush()
+            except Exception:  # noqa: BLE001
+                pass
+    print(f"[collector_run] exit code={code} at {datetime.now():%Y-%m-%d %H:%M:%S}", flush=True)
+    sys.exit(code)

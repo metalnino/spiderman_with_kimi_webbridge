@@ -40,6 +40,8 @@ config/ocr_api.json
 
 # 员工采集员运行时产物（每次运行覆写，不入库）
 reports/
+# 采集员入口自记录日志 + 启动戳（每轮覆写/归档，不入库）
+logs/
 data/collector/*.txt
 data/collector_out_*.json
 data/web/webbridge_server.log
