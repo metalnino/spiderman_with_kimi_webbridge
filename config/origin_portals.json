@@ -1,0 +1,121 @@
+{
+  "$comment": "源头平台登记表（源头追溯员的核心资产）。每条 = 一个「发布主体自己的平台」+ 声明式适配器；新增平台只加数据、不改爬虫代码。level: head=招标人自建/官方发布平台（一手正文+采购文件）; gov=政府公共资源平台; platform=第三方电子交易平台（项目在此发布并有签章附件）; mirror=纯转载镜像（绝不是源头）。adapter: bridge_spa_search=桥内站内检索+表格行取 id; bridge_page=外部搜索定位到详情页后直接桥渲染。verified 字段必须写实测日期，没实测不得写 high。",
+  "portals": [
+    {
+      "id": "chng",
+      "name": "中国华能集团电子商务平台",
+      "home": "https://ec.chng.com.cn/",
+      "domains": ["ec.chng.com.cn", "uum.ec.chng.com.cn"],
+      "buyerKeywords": ["华能"],
+      "level": "head",
+      "quality": "high",
+      "adapter": "bridge_spa_search",
+      "search": {
+        "url": "https://ec.chng.com.cn/channel/home/#/search?value={kw}",
+        "waitSec": 10,
+        "rowSelector": "tr.ant-table-row",
+        "rowKeyAttr": "data-row-key",
+        "rowTitleSelector": ".table-item"
+      },
+      "detail": {
+        "url": "https://ec.chng.com.cn/channel/home/#/detail?id={id}",
+        "waitSec": 12
+      },
+      "verified": "2026-09-20",
+      "note": "WAF 对纯 HTTP 一律 412，必须走 WebBridge 真浏览器；检索结果为 ant-design-vue 表格，tr[data-row-key] 即详情 id（实测 12930997）。"
+    },
+    {
+      "id": "zhaobide",
+      "name": "招必得（杭州建易电子招投标平台）",
+      "home": "https://www.zhaobide.com/",
+      "domains": ["zhaobide.com", "file.zhaobide.com"],
+      "buyerKeywords": [],
+      "level": "platform",
+      "quality": "medium",
+      "adapter": "bridge_page",
+      "search": {
+        "url": "",
+        "note": "站内搜索为 JS 表单提交，暂由外部搜索定位详情页（WebAfficheIndex?tenderID=&afficheID=）"
+      },
+      "verified": "2026-09-20",
+      "note": "详情页桥渲染即得项目编号/招标单位/代理/公告附件（签章版 PDF 可下载）。实测杭州创悦盈室内绿植租摆养护项目。"
+    },
+    {
+      "id": "easternairports",
+      "name": "东部机场集团电子采购平台",
+      "home": "https://bid.easternairports.com:1443/",
+      "domains": ["bid.easternairports.com"],
+      "buyerKeywords": ["东部机场"],
+      "level": "head",
+      "quality": "high",
+      "adapter": "bridge_page",
+      "status": "down",
+      "verified": "2026-09-20",
+      "note": "2026-09-20 实测站台侧 502 Bad Gateway（HTTP 与桥同报 nginx/1.26.3），登记待恢复；追溯时如实输出 portal_down，不编造正文。"
+    },
+    {
+      "id": "ciesco",
+      "name": "招商局集团电子招标采购交易平台",
+      "home": "https://dzzb.ciesco.com.cn/",
+      "domains": ["dzzb.ciesco.com.cn"],
+      "buyerKeywords": ["招商局", "招商积余", "招商商管"],
+      "level": "head",
+      "quality": "medium",
+      "adapter": "bridge_page",
+      "search": { "url": "", "note": "未实测站内检索；先用外部搜索定位，再桥渲染详情" },
+      "verified": "2026-08-23",
+      "note": "域名由 2026-08-23 web_search 验证归属；抓取适配器未实测。"
+    },
+    {
+      "id": "crc",
+      "name": "华润集团守正电子招标采购平台",
+      "home": "https://szecp.crc.com.cn/",
+      "domains": ["szecp.crc.com.cn"],
+      "buyerKeywords": ["华润", "润欣商业"],
+      "level": "head",
+      "quality": "medium",
+      "adapter": "bridge_page",
+      "search": { "url": "", "note": "未实测站内检索；先用外部搜索定位，再桥渲染详情" },
+      "verified": "2026-08-23",
+      "note": "域名由 2026-08-23 web_search 验证归属；抓取适配器未实测。"
+    },
+    {
+      "id": "ccgp",
+      "name": "中国政府采购网",
+      "home": "http://www.ccgp.gov.cn/",
+      "domains": ["ccgp.gov.cn"],
+      "buyerKeywords": [],
+      "level": "gov",
+      "quality": "high",
+      "adapter": "http_detail",
+      "search": { "url": "https://search.ccgp.gov.cn/bxsearch?searchtype=1&kw={kw}", "note": "已有 HTTP 详情能力（crawl.detail.fetch_detail）" },
+      "verified": "自身即原发",
+      "note": "政府采购法定发布媒介；已有解析器，直接复用。"
+    },
+    {
+      "id": "jsggzy",
+      "name": "江苏省公共资源交易网",
+      "home": "http://jsggzy.jszwfw.gov.cn/",
+      "domains": ["jsggzy.jszwfw.gov.cn", "jszwfw.gov.cn"],
+      "buyerKeywords": [],
+      "level": "gov",
+      "quality": "high",
+      "adapter": "http_detail",
+      "search": { "url": "", "note": "已有 HTTP 检索/详情能力（crawl.platforms 内 jsggzy）" },
+      "verified": "自身即原发",
+      "note": "江苏法定交易平台；已有解析器。"
+    }
+  ],
+  "aggregatorDomains": [
+    "chinabidding.cn", "chinabidding.com.cn", "qianlima.com", "yfbzb.com",
+    "zhaobiao.cn", "cebpubservice.com", "ggzy.gov.cn", "szexgrp.com",
+    "bidcenter.com.cn", "okcis.cn", "caizhaowang.com", "jianyu360.cn",
+    "wuyezhaobiao.cn", "zbytb.com", "biaotongtong.com", "chinamae.com",
+    "jrzb.com", "fuzhuangzhaobiao.com", "ygbid.com", "dlnyzb.com", "dnezb.com",
+    "zhaobiao.com", "bidchance.com", "chinazbcg.com", "bidnews.cn", "bidnews.com"
+  ],
+  "mirrorKeywords": [
+    "招标采购导航", "比地招标", "采招网", "千里马", "剑鱼标讯", "物业招标",
+    "招标网", "标讯", "中招", "采购与招标网"
+  ]
+}

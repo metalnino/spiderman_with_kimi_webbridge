@@ -20,6 +20,7 @@
 | `anti_bot.md` | 反爬：HTTP 主 + WebBridge 辅 |
 | `data_model.md` | MySQL 与字段约定 |
 | `filters_cascade.md` | 筛选级联规则 |
+| `origin_trace.md` | 源头追溯员（tracer）：为什么是独立岗位、三层内核、四道校验、实测与限制 |
 | `testing/开发测试流程.md` | 通用：怎么测、怎么验 |
 | `testing/验收清单.md` | 总验收（跨阶段） |
 | `phases/P0.md` … | 阶段任务 + 完成定义 + 测试项 |
