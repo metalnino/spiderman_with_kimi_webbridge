@@ -257,5 +257,15 @@ def run_detail_pass(
     if stats["stopped_reason"] is None:
         # 候选跑完（含被 per-source 截断后无剩余）——与「撞上限/撞时限」区分开，便于看台账判断
         stats["stopped_reason"] = "candidates_exhausted"
+    # 桥会话兜底清理：单条已在 crawl.tenderfile 里即时释放（fetch_*_via_bridge 的 finally），
+    # 这里再收一次残留 —— 含**上一轮进程被杀**留下的（会话登记落盘，故能跨进程收尾）。
+    try:
+        from crawl.tenderfile import close_bridge_tabs
+
+        stats["closed_tabs"] = close_bridge_tabs()
+        if stats["closed_tabs"]:
+            log(f"[detail-pass] 释放桥会话 tab {stats['closed_tabs']} 个")
+    except Exception:  # noqa: BLE001
+        stats["closed_tabs"] = None
     stats["elapsed_ms"] = int((time.time() - t0) * 1000)
     return stats

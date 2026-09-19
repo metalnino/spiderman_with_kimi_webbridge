@@ -66,6 +66,30 @@ HTTP /command：body {action,args,session} → {ok:true,data:...}；
 - 桥命令串行执行（服务端加锁），符合反爬串行纪律；jiangsu 仍按 4~6 小时一轮的节奏跑。
 - 桥不在线 ≠ 站点封禁：观测报告里不计 blocked_count，只在 empty_platforms/错误串里体现。
 
+## 标签卫生（2026-09-19，用户报 Chrome 内存越用越多）
+
+铁律：**桥给我们开的每个 tab，用完必须自己关，且不能依赖「进程还活着」。**
+
+- **会话隔离**：`list_tabs` 只看得到**同一 session** 的 tab；别的 session 的 tab 对你不可见。
+  所以「查一下有没有遗留 tab」必须先知道会话名，光查默认 session 只会得到 0（假象）。
+- 详情抓取的会话名 = `bridge_session_name(source_id, url)` = `tf-<站>-<md5(url)[:8]>`：
+  - 登记**落盘**在 `data/web/wb_open_sessions.json`（进程被强杀后仍能收尾）；
+  - `fetch_detail_via_bridge` / `fetch_cebpub_via_bridge` **单条抓完立即 release 自己的会话**
+    （`finally`），峰值 tab 从「一轮几十个」降到 1；
+  - 采集轮收尾再兜底 `close_bridge_tabs()`（清全部登记）。
+- 运维入口：
+
+```bash
+python scripts/wb_bridge.py clean-tabs               # 全清（含进程被杀遗留的）
+python scripts/wb_bridge.py clean-tabs --stale-min 90 # 只清登记超 90 分钟的
+python scripts/wb_bridge.py status | start | watch | ensure-daemon
+```
+
+- 常驻 `watch` 每 10 轮巡检（约 20 分钟）自动清一次**陈旧会话**（默认 >90 分钟），
+  所以「保活活着」= 「遗留 tab 也会被慢慢收干净」；只读登记文件 + 调桥，保活进程保持轻量。
+- 爬虫自己开的固定会话（`jiangsu-crawl` / `qianlima-crawl`）仍由各自 `finally` 里的
+  `close_group(...)` 负责。
+
 ## 扩展工具清单（2026-08-25 实测，v1.11.6；未知工具名会回错并附此清单）
 
 navigate, find_tab, evaluate, network, snapshot, click, fill, mouse_click, cdp,

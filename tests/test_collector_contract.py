@@ -634,6 +634,13 @@ class TestTenderFileKernel(unittest.TestCase):
 class TestTenderFileModes(unittest.TestCase):
     """详情抓取路由：ggzy b 页 HTTP / WebBridge / cebpub vaptcha 阻塞（全离线）。"""
 
+    def setUp(self):
+        # 单测绝不碰真桥：2026-09-19 起 fetch_detail_via_bridge / fetch_cebpub_via_bridge 会在
+        # finally 里释放自己的桥会话（crawl/tenderfile.py 的标签卫生），这里把该调用隔离掉。
+        patcher = mock.patch("crawl.webbridge_client.close_session", return_value=0)
+        patcher.start()
+        self.addCleanup(patcher.stop)
+
     def test_ggzy_detail_page_url(self):
         from crawl import tenderfile as tf
 

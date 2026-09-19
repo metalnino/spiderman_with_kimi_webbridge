@@ -120,22 +120,14 @@ def parse_payload(data: dict, kw: str) -> list[Notice]:
 
 
 def _filter_notices(notices: list[Notice]) -> tuple[list[Notice], int]:
-    """城市/发布时间过滤（与 HTTP 内核 runner.run_source 口径一致），返回 (kept, dropped)。"""
-    total = len(notices)
-    if only_target_cities():
-        targets = set(target_city_names())
-        notices = [n for n in notices if (n.city or "") in targets]
-    pmin, pmax = publish_date_range()
-    if pmin or pmax:
-        kept = []
-        for n in notices:
-            pub = (n.publish_date or "")[:10]
-            if not pub:
-                kept.append(n)  # 无日期不因范围丢弃（与内核一致）
-            elif (not pmin or pub >= pmin) and (not pmax or pub <= pmax):
-                kept.append(n)
-        notices = kept
-    return notices, total - len(notices)
+    """城市/发布时间过滤（与 HTTP 内核 runner.run_source 口径一致），返回 (kept, dropped)。
+
+    实现已抽到 `crawl/source_filter.py` 供浏览器源共用 —— tgnet 原先**完全没有过滤**，
+    实测 385 条里 340 条早于窗口起点、319 条不在 8 城（每轮还重刷一遍）。
+    """
+    from crawl.source_filter import filter_notices
+
+    return filter_notices(notices)
 
 
 def human_pause(min_s: float = 2.0, max_s: float = 6.0) -> None:

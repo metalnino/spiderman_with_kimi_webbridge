@@ -106,6 +106,25 @@ def close_group(group_title: str, *, session: str = "spiderman", timeout: int = 
     return closed
 
 
+def close_session(session: str, *, timeout: int = 30) -> int:
+    """关闭整个桥会话（其名下所有 tab），返回关闭数。
+
+    优先用扩展自带的 close_session（一次收干净）；桥版本不支持时退回逐个 close_tab。
+    注意 list_tabs 是**按会话隔离**的：别的 session 看不到本会话的 tab，
+    所以清理必须知道会话名（详见 crawl/tenderfile.py 的会话登记）。
+    """
+    r = call("close_session", {}, session=session, timeout=timeout)
+    data = r.get("data") or {}
+    if r.get("ok") and data.get("success"):
+        return int(data.get("closed") or 0)
+    # 退回逐个关（老版本扩展没有 close_session）
+    closed = 0
+    for t in list_tabs(session=session, timeout=timeout):
+        if isinstance(t, dict) and close_tab(t.get("tabId"), session=session, timeout=timeout):
+            closed += 1
+    return closed
+
+
 
 # ---------------------------------------------------------------- 开桥（幂等自愈） ---
 

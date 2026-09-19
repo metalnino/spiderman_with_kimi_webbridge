@@ -137,6 +137,14 @@ def main(argv: list[str] | None = None) -> int:
     REPORT_PATH.write_text(json.dumps(stats, ensure_ascii=False, indent=2), encoding="utf-8")
     handoff = write_handoff(stats, apply=args.apply)
     origin_trace_ok = stats.get("ok", 0)
+    # 单条模式也要收尾关标签（批量模式在 trace_batch 内部已关）
+    if "closedTabs" not in stats:
+        try:
+            from crawl.origin_portals import close_tabs
+
+            stats["closedTabs"] = close_tabs()
+        except Exception:  # noqa: BLE001
+            pass
 
     if args.json:
         print(json.dumps(stats, ensure_ascii=False, indent=2))

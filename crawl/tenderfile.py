@@ -614,23 +614,110 @@ def _err_text(e) -> str:
     return str(e)
 
 
-# 本轮详情抓取开过的 bridge 会话（用完统一关闭，防浏览器堆积标签页吃内存）
+# 详情抓取开过的 bridge 会话：用完统一关闭，防浏览器堆积标签页吃内存。
+# 2026-09-19 加固（用户报 Chrome 内存问题，实测每轮遗留约 40 个 tab）：
+#   ① 会话登记**落盘** data/web/wb_open_sessions.json —— 原实现只记在内存里，进程被外部强杀
+#      （09-19 00:39 实证）后那批 tab 就永远没人关了；
+#   ② 单条详情抓完**立即释放自己的会话**（下面两个 fetch_*_via_bridge 的 finally）——
+#      原实现只有 collector 的 _enrich_tenderfiles 结束时关一次，而新加的详情补全阶段
+#      （detail_pass）根本没调它 ⇒ 一轮攒几十个 tab，要用户手工关；
+#   ③ 支持「只清陈旧会话」（stale_only_min），供保活巡检安全清扫而不打扰正在跑的采集。
+_WB_SESSIONS_FILE = ROOT / "data" / "web" / "wb_open_sessions.json"
 _OPEN_BRIDGE_SESSIONS: set[str] = set()
 
 
-def close_bridge_tabs() -> int:
-    """关闭本轮详情抓取开过的所有 bridge tab，返回关闭数。"""
+def bridge_session_name(source_id: str, detail_url: str) -> str:
+    """详情抓取的桥会话名（与 _bridge_page 同式），供调用方在 finally 里精确释放。"""
+    return f"tf-{source_id}-{hashlib.md5(detail_url.encode()).hexdigest()[:8]}"
+
+
+def _load_session_registry() -> dict:
+    try:
+        data = json.loads(_WB_SESSIONS_FILE.read_text(encoding="utf-8"))
+        return data if isinstance(data, dict) else {}
+    except Exception:  # noqa: BLE001
+        return {}
+
+
+def _save_session_registry(reg: dict) -> None:
+    """写会话登记；**任何失败都吞掉** —— 登记只用于「收尾/陈旧清扫」，绝不能反过来拖垮抓取。"""
+    try:
+        _WB_SESSIONS_FILE.parent.mkdir(parents=True, exist_ok=True)
+        _WB_SESSIONS_FILE.write_text(json.dumps(reg, ensure_ascii=False), encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        pass
+
+
+def _now_ts() -> float:
+    """time.time() 收敛成 float：时钟被 mock/异常时也要能登记（时间只用于陈旧判断）。"""
+    try:
+        return float(time.time())
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def _register_session(session: str) -> None:
+    _OPEN_BRIDGE_SESSIONS.add(session)
+    reg = _load_session_registry()
+    reg[session] = _now_ts()
+    _save_session_registry(reg)
+
+
+def _forget_session(session: str) -> None:
+    _OPEN_BRIDGE_SESSIONS.discard(session)
+    reg = _load_session_registry()
+    if reg.pop(session, None) is not None:
+        _save_session_registry(reg)
+
+
+def close_session_safely(session: str) -> int:
+    """关掉一个桥会话（其名下所有 tab），返回关闭数；任何失败都不抛。"""
     from crawl import webbridge_client as wb
 
-    closed = 0
-    for session in list(_OPEN_BRIDGE_SESSIONS):
+    try:
+        return int(wb.close_session(session) or 0)
+    except Exception:  # noqa: BLE001
+        return 0
+
+
+def release_session(session: str) -> int:
+    """单条详情抓完立即释放：只在「确实开过」时调用桥，正常关掉后从登记里摘除。
+
+    没开过（如单测里 mock 了 _bridge_page）直接返回 0，不产生额外桥调用。
+    关不掉（桥掉线）时**保留登记**，交给保活巡检的陈旧清扫重试。
+    """
+    if session not in _OPEN_BRIDGE_SESSIONS and session not in _load_session_registry():
+        return 0
+    closed = close_session_safely(session)
+    if closed:
+        _forget_session(session)
+    return closed
+
+
+def close_bridge_tabs(*, stale_only_min: float | None = None) -> int:
+    """关闭详情抓取留下的 bridge tab，返回关闭数。
+
+    stale_only_min=None：关掉「内存登记 + 落盘登记」里的全部会话（采集轮收尾用）；
+    给了分钟数：只关登记时间超过该值的会话（保活巡检用，避免打扰正在跑的采集）。
+    """
+    reg = _load_session_registry()
+    now = _now_ts()
+    targets = set(_OPEN_BRIDGE_SESSIONS)
+    keep: dict = {}
+    for sess, ts in reg.items():
         try:
-            for t in wb.list_tabs(session=session):
-                if wb.close_tab(t.get("tabId"), session=session):
-                    closed += 1
-        except Exception:
-            pass
+            age_min = (now - float(ts)) / 60.0
+        except (TypeError, ValueError):
+            age_min = 0.0
+        if stale_only_min is not None and age_min < stale_only_min:
+            keep[sess] = ts  # 还新鲜：可能正在被采集使用
+        else:
+            targets.add(sess)
+    closed = 0
+    for sess in sorted(targets):
+        closed += close_session_safely(sess)
     _OPEN_BRIDGE_SESSIONS.clear()
+    _save_session_registry(keep)
     return closed
 
 
@@ -641,11 +728,11 @@ def _bridge_page(source_id: str, detail_url: str, *, wait_sec: float = 10.0) -> 
     st = wb.ensure_bridge(wait_sec=60)
     if not st.get("bridge") or not st.get("extensions"):
         return {"error": "bridge_unavailable"}
-    session = f"tf-{source_id}-{hashlib.md5(detail_url.encode()).hexdigest()[:8]}"
+    session = bridge_session_name(source_id, detail_url)
     nav = wb.navigate(detail_url, session=session, group_title="tenderfile", new_tab=True)
     if not nav.get("ok"):
         return {"error": f"bridge_navigate_failed: {_err_text(nav.get('error'))[:120]}"}
-    _OPEN_BRIDGE_SESSIONS.add(session)
+    _register_session(session)
     time.sleep(wait_sec + random.uniform(0, 3))
     page = _bridge_eval_json(session, BRIDGE_EXTRACT_JS)
     cookie = ""
@@ -1033,6 +1120,15 @@ def _bridge_attachment_candidates(links: list, page_url: str) -> list[tuple[str,
 
 
 def fetch_detail_via_bridge(source_id: str, detail_url: str) -> dict:
+    """WebBridge 详情入口：正文（摘要）+ 附件，**用完立即释放自己的桥会话**（防 tab 堆积）。"""
+    try:
+        return _fetch_detail_via_bridge_inner(source_id, detail_url)
+    finally:
+        if detail_url and detail_url.startswith(("http://", "https://")):
+            release_session(bridge_session_name(source_id, detail_url))
+
+
+def _fetch_detail_via_bridge_inner(source_id: str, detail_url: str) -> dict:
     """WebBridge 详情：正文可达（摘要填充）；江苏账号登录后附件可下载，登录门未过时如实 null。"""
     out: dict = {"ok": False, "error": None, "summary": None, "tenderFile": None}
     if not detail_url or not detail_url.startswith(("http://", "https://")):
@@ -1270,6 +1366,15 @@ def cebpub_des_decrypt(b64: str) -> str:
 
 
 def fetch_cebpub_via_bridge(detail_url: str) -> dict:
+    """cebpub 详情入口：**用完立即释放自己的桥会话**（vaptcha 未过也要关，页面留着没用）。"""
+    try:
+        return _fetch_cebpub_via_bridge_inner(detail_url)
+    finally:
+        if detail_url and detail_url.startswith(("http://", "https://")):
+            release_session(bridge_session_name("cebpub", detail_url))
+
+
+def _fetch_cebpub_via_bridge_inner(detail_url: str) -> dict:
     """cebpub 详情：SPA vaptcha 人工验证后内容才渲染；桥内已验证时抓附件（页面 Cookie→HTTP 或桥内下载）。
 
     vaptcha 未过时如实 detail_vaptcha_gated 并登记待办（验证码不可绕过，人工一次后会话复用）。

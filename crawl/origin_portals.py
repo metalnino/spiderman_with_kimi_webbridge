@@ -22,6 +22,11 @@ ROOT = Path(__file__).resolve().parents[1]
 CFG_PATH = ROOT / "config" / "origin_portals.json"
 
 BRIDGE_GROUP = "origin-trace"
+# 固定会话名：**必须固定**，否则每个 URL 一个新会话，`list_tabs(session=...)` 彼此看不见、
+# 谁也关不掉谁 —— 实测批量跑到一半 `ot-websearch` 会话堆了几百个标签、当前标签被关掉后
+# `evaluate` 永久失败，**所有检索静默返回 0 条**（10 条追溯全部假 no_hint）。
+SEARCH_SESSION = "origin-search"
+PAGE_SESSION = "origin-trace"
 
 # 结果行提取：把「选择器」注入到通用 JS 里（桥内 evaluate 在主世界执行，DOM 与 Vue 实例都可达）
 _ROWS_JS = r"""(() => {
@@ -147,22 +152,42 @@ def bridge_ready(wait_sec: float = 30.0) -> tuple[bool, str]:
 
 
 def open_page(url: str, *, source_id: str = "origin", wait_sec: float = 8.0,
-              session: str | None = None, group: str = BRIDGE_GROUP) -> dict:
-    """桥内打开 URL → {text, links, cookie, session, title} 或 {error}。"""
+              session: str | None = None, group: str = BRIDGE_GROUP,
+              close_after: bool = False) -> dict:
+    """桥内打开 URL → {text, links, cookie, session, tabId} 或 {error}。
+
+    固定会话名 + close_after：追溯会开很多候选页，**每个 URL 一个新会话名就谁也关不掉谁**
+    （`list_tabs` 是会话隔离的），实测一次批量后堆了几百个标签、当前标签被驱逐导致
+    `evaluate` 永久失败、**所有检索静默返回 0 条**。现在统一用 PAGE_SESSION，
+    并支持读完即关。
+    """
     from crawl import webbridge_client as wb
     from crawl.tenderfile import BRIDGE_EXTRACT_JS, _bridge_eval_json
 
     ok, why = bridge_ready()
     if not ok:
         return {"error": why}
-    sess = session or f"ot-{source_id}-{hashlib.md5(url.encode('utf-8')).hexdigest()[:8]}"
+    sess = session or PAGE_SESSION
     nav = wb.navigate(url, session=sess, group_title=group, new_tab=True)
     if not nav.get("ok"):
         return {"error": f"bridge_navigate_failed:{str(nav.get('error'))[:120]}", "session": sess}
+    tab_id = (nav.get("data") or {}).get("tabId")
+
+    def _close():
+        if close_after and tab_id:
+            try:
+                wb.close_tab(tab_id, session=sess)
+            except Exception:  # noqa: BLE001
+                pass
+
+    if not tab_id:
+        _close()
+        return {"error": "bridge_no_tab_id", "session": sess}
     time.sleep(max(wait_sec, 1.0))
     page = _bridge_eval_json(sess, BRIDGE_EXTRACT_JS)
     # 注意：_bridge_eval_json 返回的是页面 JS 的**载荷本身**（title/len/text/links），不是 {ok:...}
     if not isinstance(page, dict) or "text" not in page:
+        _close()
         return {"error": f"bridge_eval_failed:{str(page)[:100]}", "session": sess}
     cookie = ""
     try:
@@ -170,40 +195,68 @@ def open_page(url: str, *, source_id: str = "origin", wait_sec: float = 8.0,
         cookie = c.get("cookie") or ""
     except Exception:  # noqa: BLE001
         pass
-    return {
+    out = {
         "error": None,
         "session": sess,
+        "tabId": tab_id,
         "title": page.get("title") or "",
         "text": page.get("text") or "",
         "links": page.get("links") or [],
         "cookie": cookie,
     }
+    if close_after:
+        _close()
+    return out
 
 
 def close_tabs(group: str = BRIDGE_GROUP) -> int:
-    """关掉追溯开过的 tab（防浏览器堆标签页）。"""
-    try:
-        from crawl import webbridge_client as wb
+    """关掉追溯开过的 tab（防浏览器堆标签页）。
 
-        return wb.close_group(group, session="origin-trace-close")
-    except Exception:  # noqa: BLE001
-        return 0
+    必须**按固定会话名**逐个关：`list_tabs` 是会话隔离的，用别的会话名查什么都看不到
+    （旧实现传了 "origin-trace-close" 这个不存在的会话 → 永远关 0 个，标签一直堆）。
+    """
+    from crawl import webbridge_client as wb
+
+    closed = 0
+    for sess in (SEARCH_SESSION, PAGE_SESSION):
+        try:
+            for t in wb.list_tabs(session=sess):
+                if wb.close_tab(t.get("tabId"), session=sess):
+                    closed += 1
+        except Exception:  # noqa: BLE001
+            continue
+    return closed
 
 
-def search_web(query: str, *, session: str | None = None, wait_sec: float = 5.0) -> list[dict]:
-    """桥内 Bing 检索 → [{title,url,snippet}]。失败/被风控返回 []。"""
+def search_web(query: str, *, session: str | None = None, wait_sec: float = 5.0,
+               new_tab: bool = False) -> list[dict]:
+    """桥内 Bing 检索 → [{title,url,snippet}]。失败/被风控返回 []。
+
+    **固定会话 + 复用同一个标签**（new_tab=False）：每条 query 开一个新标签会把浏览器堆爆，
+    标签一旦被驱逐/关闭，该会话的 `evaluate` 就永久失败 —— 实测一次批量后
+    `ot-websearch` 会话堆了几百个标签、后续**所有检索静默返回 0 条**，10 条追溯全成了假 no_hint。
+    """
     from crawl import webbridge_client as wb
 
     ok, _ = bridge_ready()
     if not ok:
         return []
-    sess = session or "ot-websearch"
+    sess = session or SEARCH_SESSION
     url = "https://cn.bing.com/search?q=" + urllib.parse.quote(query)
-    nav = wb.navigate(url, session=sess, group_title=BRIDGE_GROUP, new_tab=True)
-    if not nav.get("ok"):
+    for attempt in (1, 2):
+        # 第一次复用标签；若失败（标签被关/会话悬空）→ 新建一个标签重试
+        nav = wb.navigate(url, session=sess, group_title=BRIDGE_GROUP,
+                          new_tab=(new_tab or attempt == 2))
+        if not nav.get("ok"):
+            if attempt == 2:
+                return []
+            continue
+        time.sleep(max(wait_sec, 2.0))
+        r = wb.evaluate(_WEB_SEARCH_JS, session=sess)
+        if r.get("ok"):
+            break
+    else:
         return []
-    time.sleep(max(wait_sec, 2.0))
-    r = wb.evaluate(_WEB_SEARCH_JS, session=sess)
     val = ((r or {}).get("data") or {}).get("value")
     if isinstance(val, str):
         try:
@@ -278,7 +331,7 @@ def fetch_origin_page(url: str, *, portal_id: str = "origin", wait_sec: float = 
         _bridge_attachment_candidates, _bridge_summary, _download_and_extract,
     )
 
-    page = open_page(url, source_id=portal_id, wait_sec=wait_sec)
+    page = open_page(url, source_id=portal_id, wait_sec=wait_sec, close_after=True)
     if page.get("error"):
         return {"ok": False, "error": page["error"], "text": "", "summary": None, "attachments": []}
     text = page.get("text") or ""

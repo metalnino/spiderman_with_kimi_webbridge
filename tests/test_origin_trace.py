@@ -268,6 +268,9 @@ class TestTraceOneWithInjectedIO(unittest.TestCase):
             search_portal_fn=lambda portal, kw: search_rows,
             search_web_fn=lambda q: [],
             fetch_fn=fake_fetch,
+            # AI 通道必须注入空实现：否则单测会真的打 DeepSeek（慢、要钱、结果不确定）
+            pick_fn=lambda *a, **k: {},
+            suggest_fn=lambda *a, **k: {"portals": []},
         )
 
     def test_happy_path_via_registry(self):
@@ -287,6 +290,7 @@ class TestTraceOneWithInjectedIO(unittest.TestCase):
         self.assertEqual(rec["method"], "portal_registry")
 
     def test_not_found_when_search_returns_nothing(self):
+        """检索通道整轮 0 条 → 必须报 search_unavailable（环境故障），不能报 no_hint（假 0）。"""
         rows = [{
             "id": 1, "source_id": "chinabidding",
             "title": "华能天成融资租赁有限公司上海职场绿植租摆服务项目采购询比采购公告",
@@ -296,7 +300,7 @@ class TestTraceOneWithInjectedIO(unittest.TestCase):
             "origin_source": None, "buyer": None, "project_code": None,
         }]
         rec = self._run(rows, [])
-        self.assertIn(rec["status"], ("not_found", "no_hint"))
+        self.assertIn(rec["status"], ("not_found", "no_hint", "search_unavailable"))
         self.assertIsNone(rec["detailUrl"])
 
     def test_source_is_origin_short_circuits(self):
@@ -405,6 +409,56 @@ class TestMethodFixes(unittest.TestCase):
         self.assertTrue(ot._url_looks_list("https://www.wzbank.cn/purchase_info/list"))
         self.assertTrue(ot._url_looks_list("https://www.wzbank.cn/"))
         self.assertFalse(ot._url_looks_list("https://www.wzbank.cn/purchase_info/view/page_id/36919"))
+
+
+class TestAICandidateGuards(unittest.TestCase):
+    """AI 通道的**护栏**（不碰真模型）：AI 只能提候选，不能造地址。"""
+
+    def test_clean_domain_rejects_junk(self):
+        from crawl.ai_origin import _clean_domain
+        self.assertEqual(_clean_domain("https://wzbank.cn/purchase_info"), "wzbank.cn")
+        self.assertEqual(_clean_domain("WWW.Ahjg.com:8080/x"), "www.ahjg.com")
+        for bad in (None, "", "null", "无", "未知", "foo", "有 空格.com"):
+            self.assertIsNone(_clean_domain(bad), bad)
+
+    def test_pick_origin_only_accepts_real_candidate(self):
+        """模型返回一个不在候选里的 URL（幻觉）→ 必须被拒。"""
+        from crawl import ai_origin
+
+        cands = [{"title": "A", "url": "https://www.wzbank.cn/purchase_info/view/page_id/36919"}]
+        orig = ai_origin._chat_json
+        try:
+            ai_origin._chat_json = lambda *a, **k: {"url": "https://evil.example/fake", "confidence": 0.9}
+            self.assertEqual(ai_origin.pick_origin("标题", cands), {})
+            # 返回候选里真实存在的 URL → 接受
+            ai_origin._chat_json = lambda *a, **k: {
+                "url": "https://www.wzbank.cn/purchase_info/view/page_id/36919", "confidence": 0.8}
+            got = ai_origin.pick_origin("标题", cands)
+            self.assertEqual(got["url"], cands[0]["url"])
+        finally:
+            ai_origin._chat_json = orig
+
+    def test_suggest_portals_sanitizes(self):
+        from crawl import ai_origin
+
+        orig = ai_origin._chat_json
+        try:
+            ai_origin._chat_json = lambda *a, **k: {
+                "officialSite": "https://wzbank.cn/",
+                "portals": [{"name": "官网采购栏目", "domain": "wzbank.cn", "level": "head",
+                             "confidence": 0.9, "reason": "银行官网"},
+                            {"name": "编造", "domain": "not a domain", "level": "gov"},
+                            {"name": "怪级别", "domain": "ahjg.com", "level": "??"}],
+            }
+            out = ai_origin.suggest_portals("温州银行股份有限公司", "某项目")
+            doms = [p["domain"] for p in out["portals"]]
+            self.assertIn("wzbank.cn", doms)
+            self.assertIn("ahjg.com", doms)
+            self.assertEqual(len(doms), 2)                      # 非法域名被丢
+            lv = {p["domain"]: p["level"] for p in out["portals"]}
+            self.assertEqual(lv["ahjg.com"], "platform")        # 非法 level 归一到 platform
+        finally:
+            ai_origin._chat_json = orig
 
 
 if __name__ == "__main__":

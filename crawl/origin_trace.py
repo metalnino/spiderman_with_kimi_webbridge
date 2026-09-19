@@ -848,9 +848,10 @@ def descend(site_url: str, *, title: str, hints: dict, wait_sec: float, download
 def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
               origin_url: str | None = None,
               use_ai: bool = True, allow_discovery: bool = True, download: bool = True,
-              deep_search: bool = True,
+              deep_search: bool = True, ai_discovery: bool = True,
               min_title_score: float = 0.55, max_candidates: int = 10,
               search_web_fn=None, search_portal_fn=None, fetch_fn=None, descend_fn=None,
+              pick_fn=None, suggest_fn=None,
               db=None) -> dict:
     """追溯单个项目（project_key 或 notice_id 二选一）。永不抛，失败如实落 status/error。
 
@@ -871,6 +872,7 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
         "candidates": [], "body": {"chars": 0, "path": None}, "attachments": [],
         "notes": [], "error": None, "elapsedMs": 0,
     }
+    search_empty = False
     rows: list[dict] = []
     try:
         if notice_id and not project_key:
@@ -1027,6 +1029,11 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
                         seen_urls.add(u)
                         results.append(r)
             rec["notes"].append(f"外部检索词 {len(used_queries)}/{len(queries)}：{' | '.join(used_queries)}")
+            if not results:
+                # 检索通道整轮 0 条 = 环境故障（桥异常/风控），**不是**「这条公告没有源头」。
+                # 必须与 no_hint 区分开，否则就是 AGENTS.md 明令禁止的「假 0」。
+                search_empty = True
+                rec["notes"].append("⚠ 检索通道本轮返回 0 条：可能是桥/风控故障，不据此判定「无源头」")
 
             # ---- 第二轮「深入检索」：拿到主体域后，用 site:{域} {核心名} 把该域下的详情页直接捞出来 ----
             # 为什么必须有这一轮：第一轮 `{主体} 采购公告` 能把**主体自己的域**顶出来，
@@ -1082,14 +1089,31 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
 
             cands = _candidate_filter(results, registry=load_registry(),
                                       seed_title=seed.get("title") or "")
-            rec["candidates"] = [{k: c.get(k) for k in ("title", "url", "domain", "level", "score")}
-                                 for c in cands[:max_candidates]]
             if not rec.get("method"):
                 rec["method"] = "web_search"
             ff = fetch_fn or _default_fetch
+            _descend_fn = descend_fn or descend
+
+            # ---- AI 选源（在候选**遍历之前**做，才能影响遍历顺序）----
+            # 最安全的一种 AI 用法：只在**真实检索结果**里做选择，不能凭空造地址；
+            # 纯字符启发式分不出「哪条域名是采购人自己的」（镜像详情页、相邻公告、企业信息站都在候选里），
+            # 而模型有世界知识（"安徽交控官网是 ahjg.com"）也读得懂 URL 语义。
+            # AI 只做排序，选出来的 URL 仍要过 _fetch_and_verify 的页面证据校验。
+            if ai_discovery and cands:
+                from crawl import ai_origin
+
+                pk = (pick_fn or ai_origin.pick_origin)(
+                    seed.get("title") or "",
+                    [{"title": c.get("title"), "url": c.get("url")} for c in cands[:20]],
+                    buyer=hints.get("buyer"))
+                if pk.get("url"):
+                    cands.sort(key=lambda c: 0 if c.get("url") == pk["url"] else 1)
+                    rec["notes"].append(
+                        f"AI 选源：{pk['url'][:80]}（conf {pk.get('confidence')}，"
+                        f"{str(pk.get('reason') or '')[:60]}）")
+
             tried = 0
             descend_budget = 4
-            _descend_fn = descend_fn or descend
             for c in cands[:max_candidates]:
                 tried += 1
                 got = _fetch_and_verify(c["url"], title=seed.get("title") or "", hints=hints,
@@ -1163,9 +1187,50 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
                                                         "score", "titleScore", "reject")}
                                  for c in cands[:max_candidates]]
 
+            # ---- AI 猜源头平台通道（补搜索引擎收录不到的平台，如招必得） ----
+            if ai_discovery and not detail_url:
+                from crawl import ai_origin
+
+                sg = (suggest_fn or ai_origin.suggest_portals)(
+                    hints.get("buyer"), seed.get("title") or "",
+                    city=seed.get("city"), hints=hints)
+                ai_ports = sg.get("portals") or []
+                if ai_ports:
+                    rec["notes"].append("AI 推测源头平台：" + ", ".join(
+                        f"{p['domain']}({p['level']},{p['confidence']})" for p in ai_ports[:4]))
+                for p in ai_ports[:4]:
+                    base = "https://" + p["domain"] + "/"
+                    d_list = _descend_fn(base, title=seed.get("title") or "", hints=hints,
+                                         wait_sec=portal_wait(portal or {}, "detail", 6.0),
+                                         download=False, fetch_fn=ff,
+                                         publish_date=seed.get("publish_date"),
+                                         log=lambda m: rec["notes"].append(m)) or []
+                    for d in d_list[:4]:
+                        got4 = _fetch_and_verify(d["url"], title=seed.get("title") or "", hints=hints,
+                                                 publish_date=seed.get("publish_date"),
+                                                 portal_id=p["domain"], wait_sec=6.0,
+                                                 download=download, min_score=min_title_score,
+                                                 fetch_fn=ff)
+                        if got4.get("ok"):
+                            detail_url = d["url"]
+                            picked_page = got4.get("page")
+                            rec["method"] = "ai_guess"
+                            rec["matchScore"] = got4.get("score") or 0.0
+                            rec["_trust"] = got4.get("trust") or "low"
+                            rec["originLevel"] = got4.get("level") or p["level"]
+                            rec["notes"].append(
+                                f"AI 通道命中（{p['domain']} / {d['via']}）：{d['url'][:80]}")
+                            break
+                    if detail_url:
+                        break
+
         if not detail_url:
-            rec["status"] = "not_found" if rec["candidates"] or portal else "no_hint"
-            rec["error"] = rec.get("error") or "origin_not_located"
+            if search_empty and not rec["candidates"]:
+                rec["status"] = "search_unavailable"
+                rec["error"] = rec.get("error") or "search_channel_empty"
+            else:
+                rec["status"] = "not_found" if rec["candidates"] or portal else "no_hint"
+                rec["error"] = rec.get("error") or "origin_not_located"
             return _finish(rec, t0)
 
         # ---- 取回一手正文 + 附件 ----
@@ -1367,9 +1432,10 @@ def trace_batch(*, limit: int = 3, keywords: str | None = "绿植租摆|绿植�
     groups = ([{"project_key": k} for k in only_keys] if only_keys
               else pick_groups(limit=max(limit * 3, limit), only_keywords=keywords))
     stats = {"enabled": True, "candidates": len(groups), "processed": 0, "ok": 0,
-             "partial": 0, "not_found": 0, "blocked": 0, "elapsedMs": 0,
-             "stoppedReason": None, "records": [], "applied": 0}
+             "partial": 0, "not_found": 0, "blocked": 0, "search_unavailable": 0,
+             "elapsedMs": 0, "stoppedReason": None, "records": [], "applied": 0}
     deadline = t0 + minutes * 60
+    consecutive_channel_fail = 0
     for g in groups:
         if stats["processed"] >= limit:
             stats["stoppedReason"] = "limit_total"
@@ -1379,6 +1445,16 @@ def trace_batch(*, limit: int = 3, keywords: str | None = "绿植租摆|绿植�
             break
         rec = fn(project_key=g["project_key"], use_ai=use_ai, download=download)
         stats["processed"] += 1
+        if rec.get("status") == "search_unavailable":
+            # 检索通道连续故障 → 停手，别把整批都跑成假结论（AGENTS.md：不把假 0 当成功）
+            stats["search_unavailable"] += 1
+            consecutive_channel_fail += 1
+            if consecutive_channel_fail >= 3:
+                stats["stoppedReason"] = "search_channel_down"
+                stats["records"].append(public_record(rec))
+                break
+        else:
+            consecutive_channel_fail = 0
         if rec.get("status") == "ok":
             stats["ok"] += 1
         elif rec.get("status") == "partial":
@@ -1398,4 +1474,11 @@ def trace_batch(*, limit: int = 3, keywords: str | None = "绿植租摆|绿植�
     stats["elapsedMs"] = int((time.time() - t0) * 1000)
     if not stats["stoppedReason"]:
         stats["stoppedReason"] = "candidates_exhausted"
+    # 收尾关掉本轮开过的标签：不关就会堆到「当前标签被驱逐 → 检索永久返回 0 条」（实测踩过）
+    try:
+        from crawl.origin_portals import close_tabs
+
+        stats["closedTabs"] = close_tabs()
+    except Exception:  # noqa: BLE001
+        stats["closedTabs"] = 0
     return stats

@@ -98,6 +98,7 @@ def main(keywords: Optional[list[str]] = None) -> dict:
     from playwright.sync_api import sync_playwright
 
     from crawl.db_store import finish_run, start_run, upsert_notices
+    from crawl.source_filter import filter_notices
 
     kws = keywords or enabled_keywords()
     run_id = start_run("tgnet")
@@ -114,12 +115,19 @@ def main(keywords: Optional[list[str]] = None) -> dict:
                 notices.extend(items)
                 print(f"[tgnet-pw] {kw} items={len(items)}", flush=True)
             browser.close()
-        stats = upsert_notices(notices)
-        finish_run(run_id, status="success", item_count=stats["attempted"], note=f"tgnet-pw items={len(notices)}")
+        # 2026-09-19：补上城市/发布时间过滤（与 HTTP 内核口径一致）。
+        # 原先这里直接 upsert 全量 ⇒ 2008–2026 的工程库项目全进台账（385 条里 340 条越窗、
+        # 319 条不在 8 城），且每轮把 373 条重刷一遍：既白刷又污染下游。
+        kept, dropped = filter_notices(notices)
+        stats = upsert_notices(kept)
+        finish_run(
+            run_id, status="success", item_count=stats["attempted"],
+            note=f"tgnet-pw raw={len(notices)} kept={len(kept)} city_date_drop={dropped}",
+        )
         return {
             "status": "success",
             "error": None,
-            "notices": [{**asdict(n), "content_hash": n.content_hash()} for n in notices],
+            "notices": [{**asdict(n), "content_hash": n.content_hash()} for n in kept],
         }
     except Exception as e:  # noqa: BLE001
         finish_run(run_id, status="failed", item_count=0, note=str(e)[:500])

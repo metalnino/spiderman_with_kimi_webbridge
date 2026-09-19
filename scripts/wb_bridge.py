@@ -37,6 +37,48 @@ WATCH_HEARTBEAT = ROOT / "data" / "web" / "wb_watch_heartbeat.json"
 LOG_DIR = Path(os.environ.get("SPIDER_LOG_DIR") or (ROOT / "logs"))
 WATCH_LOG = LOG_DIR / "wb_watch.log"
 WATCH_LOG_HANDLES: list = []
+# 详情抓取的桥会话登记（crawl/tenderfile.py 维护）：保活巡检据此清扫「进程被杀遗留的 tab」
+SESSIONS_FILE = ROOT / "data" / "web" / "wb_open_sessions.json"
+CLEAN_TABS_EVERY_CYCLES = 10   # 每 10 轮巡检（默认 120s → 约 20 分钟）清一次陈旧会话
+CLEAN_TABS_STALE_MIN = 90.0    # 只清「登记超过 90 分钟」的会话，避免打扰正在跑的采集
+
+
+def clean_stale_sessions(*, stale_min: float = CLEAN_TABS_STALE_MIN) -> int:
+    """清扫陈旧桥会话，返回关闭的 tab 数。
+
+    为什么保活要做这件事（用户 2026-09-19 报 Chrome 内存）：详情抓取会为每条公告开一个
+    桥会话（`tf-<站>-<hash>`），**会话是按 session 隔离的**（list_tabs 看不到别的 session），
+    所以进程一旦被强杀，那批 tab 就再也没人关。这里按登记文件里时间戳超龄的会话收掉。
+    只依赖登记文件 + 桥本身，不 import crawl.tenderfile —— 保活进程保持轻量。
+    """
+    try:
+        reg = json.loads(SESSIONS_FILE.read_text(encoding="utf-8"))
+        if not isinstance(reg, dict):
+            return 0
+    except Exception:  # noqa: BLE001 —— 没登记文件/读不动都当无事
+        return 0
+    now = time.time()
+    stale: list[str] = []
+    for sess, ts in list(reg.items()):
+        try:
+            age_min = (now - float(ts)) / 60.0
+        except (TypeError, ValueError):
+            age_min = 0.0
+        if stale_min <= 0 or age_min >= stale_min:
+            stale.append(sess)
+    closed = 0
+    for sess in stale:
+        try:
+            closed += int(wb.close_session(sess) or 0)
+        except Exception:  # noqa: BLE001
+            pass
+        reg.pop(sess, None)
+    if stale:
+        try:
+            SESSIONS_FILE.write_text(json.dumps(reg, ensure_ascii=False), encoding="utf-8")
+        except OSError:
+            pass
+    return closed
 
 
 def _install_watch_log() -> None:
@@ -112,9 +154,11 @@ def ensure_daemon(*, interval: float = 120.0, stale_after: float = 300.0) -> dic
 
 def main() -> int:
     ap = argparse.ArgumentParser(description="WebBridge 一键运维")
-    ap.add_argument("cmd", choices=["status", "start", "stop", "wait", "watch", "ensure-daemon"])
+    ap.add_argument("cmd", choices=["status", "start", "stop", "wait", "watch", "ensure-daemon", "clean-tabs"])
     ap.add_argument("--wait-sec", type=float, default=90.0)
     ap.add_argument("--interval", type=float, default=120.0, help="watch 模式巡检间隔（秒）")
+    ap.add_argument("--stale-min", type=float, default=0.0,
+                    help="clean-tabs：只清登记超过 N 分钟的桥会话（0=全清）")
     args = ap.parse_args()
 
     if args.cmd == "watch":
@@ -127,6 +171,7 @@ def main() -> int:
             print(json.dumps({"watch": "already_running"}, ensure_ascii=False), flush=True)
             return 0
         print(json.dumps({"watch": "start", "interval_s": interval, "pid": os.getpid()}, ensure_ascii=False), flush=True)
+        cycles = 0
         while True:
             bridge_ok = False
             try:
@@ -143,8 +188,27 @@ def main() -> int:
             except Exception as e:  # noqa: BLE001 —— 单次巡检异常绝不能杀死保活
                 print(json.dumps({"t": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
                                   "error": str(e)[:200]}, ensure_ascii=False), flush=True)
+            cycles += 1
+            # 周期性清扫「陈旧桥会话」：详情抓取按条开会话，进程被强杀后那些 tab 没人关，
+            # 会一直占 Chrome 内存。只清超龄会话（90 分钟），不打扰正在跑的采集。
+            if cycles % CLEAN_TABS_EVERY_CYCLES == 0:
+                try:
+                    cleaned = clean_stale_sessions()
+                    if cleaned:
+                        print(json.dumps({"t": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                          "cleaned_tabs": cleaned}, ensure_ascii=False), flush=True)
+                except Exception as e:  # noqa: BLE001
+                    print(json.dumps({"t": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+                                      "clean_error": str(e)[:160]}, ensure_ascii=False), flush=True)
             _heartbeat(interval, bridge_ok)
             time.sleep(interval)
+
+    if args.cmd == "clean-tabs":
+        # 手工清扫：默认全清（--stale-min N 则只清超龄会话）
+        stale = float(args.stale_min) if args.stale_min and float(args.stale_min) > 0 else 0.0
+        cleaned = clean_stale_sessions(stale_min=stale)
+        print(json.dumps({"closed_tabs": cleaned, "stale_min": stale}, ensure_ascii=False))
+        return 0
 
     if args.cmd == "ensure-daemon":
         print(json.dumps(ensure_daemon(interval=args.interval,
