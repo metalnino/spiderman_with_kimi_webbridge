@@ -48,17 +48,26 @@ class TestHints(unittest.TestCase):
         self.assertEqual(out["projectCode"], "X1")  # 已有值不被覆盖
         self.assertEqual(out["emailDomains"], ["a.com"])
 
-    def test_search_queries_orders_and_dedupes(self):
-        h = {"buyer": "华能天成融资租赁有限公司", "projectCode": "HNFZ2026-09-2-00396"}
-        qs = origin_hints.search_queries(h, "上海职场绿植租摆服务采购询比采购公告")
-        self.assertTrue(qs[0].startswith('"HNFZ'))
-        self.assertTrue(any("招标采购交易平台" in q for q in qs))  # 平台发现型检索词必须存在
+    def test_search_queries_buyer_first(self):
+        """实测口径：「主体名 + 采购公告」是唯一稳定把一手源顶到首屏的形态，必须排第一。"""
+        h = {"buyer": "温州银行股份有限公司"}
+        qs = origin_hints.search_queries(h, "温州银行股份有限公司关于杭州大楼绿植租摆养护服务项目的中标(成交)结果公告")
+        self.assertEqual(qs[0], "温州银行股份有限公司 采购公告")
         self.assertEqual(len(qs), len(set(qs)))
+        self.assertTrue(all("原始公告" not in q and "交易平台" not in q for q in qs))  # 实测无效词已删
 
     def test_search_queries_without_buyer(self):
         qs = origin_hints.search_queries({}, "上海职场绿植租摆服务采购询比采购公告")
         self.assertTrue(qs)
-        self.assertTrue(any("交易平台" in q for q in qs))
+        self.assertTrue(all("采购公告" not in q or "上海" in q for q in qs))
+
+    def test_looks_like_origin_domain(self):
+        f = origin_hints.looks_like_origin_domain
+        self.assertTrue(f("https://www.ccgp.gov.cn/a.htm"))            # gov
+        self.assertTrue(f("https://ec.chng.com.cn/x"))                 # 已登记 head
+        self.assertTrue(f("https://czju.suzhou.gov.cn/zfcg/x"))
+        self.assertFalse(f("https://www.qianlima.com/bid-1.html"))     # 聚合站
+        self.assertFalse(f("https://random-shop.example/x"))
 
 
 class TestGarbled(unittest.TestCase):
@@ -298,6 +307,81 @@ class TestTraceOneWithInjectedIO(unittest.TestCase):
         self.assertTrue(rec["sourceIsOrigin"])
         self.assertEqual(rec["status"], "ok")
         self.assertEqual(rec["method"], "source_is_origin")
+
+
+class TestMethodFixes(unittest.TestCase):
+    """本轮实测暴露的方法缺陷对应的回归用例（每条都对应一个真实失败案例）。"""
+
+    def test_szexgrp_is_own_platform_not_aggregator(self):
+        # 自有平台 ≠ 聚合站：深圳交易集团自己的平台，同时也在我们的采集源里
+        self.assertEqual(classify_domain("https://ygcg.szexgrp.com/jyxxDetails.htm?x=1"), "platform")
+
+    def test_is_site_root(self):
+        self.assertTrue(ot._is_site_root("https://www.wzbank.cn/"))
+        self.assertTrue(ot._is_site_root("https://www.ahjg.com/"))
+        self.assertTrue(ot._is_site_root("https://czju.suzhou.gov.cn/zfcg/"))
+        self.assertFalse(ot._is_site_root(
+            "https://www.wzbank.cn/purchase_info/view/page_id/36919"))
+
+    def test_next_page_link_three_forms(self):
+        # ① 文本「下一页」
+        self.assertEqual(
+            ot._next_page_link([{"t": "下一页", "h": "https://a.com/list?page=2"}], "https://a.com/list"),
+            "https://a.com/list?page=2")
+        # ② ?page=N
+        self.assertEqual(
+            ot._next_page_link([{"t": "2", "h": "https://a.com/list?page=2"}], "https://a.com/list"),
+            "https://a.com/list?page=2")
+        # ③ 路径分页（温州银行形态：只有 [1][2]…[10]，没有「下一页」也没有 ?page=）
+        links = [{"t": f"[{i}]", "h": f"https://www.wzbank.cn/purchase_info/list/page/{i}"}
+                 for i in range(1, 11)]
+        self.assertEqual(
+            ot._next_page_link(links, "https://www.wzbank.cn/purchase_info/list"),
+            "https://www.wzbank.cn/purchase_info/list/page/2")
+        self.assertEqual(
+            ot._next_page_link(links, "https://www.wzbank.cn/purchase_info/list/page/3"),
+            "https://www.wzbank.cn/purchase_info/list/page/4")
+
+    def test_passed_target_date(self):
+        # 列表按时间倒序：本页最新日期都早于目标 → 目标只可能更靠前，已经翻过头
+        page = "公告一 2026年9月9日 公告二 2026年9月7日"
+        self.assertFalse(ot._passed_target_date(page, "2026-08-28"))   # 目标更旧，还要继续翻
+        self.assertTrue(ot._passed_target_date(page, "2026-10-01"))    # 目标更新，早该在前面出现
+        self.assertFalse(ot._passed_target_date("没有日期", "2026-08-28"))
+
+    def test_self_published_email(self):
+        text = "项目联系人：傅女士 邮箱：07077@wzbank.cn"
+        self.assertEqual(ot.self_published_email(text, "www.wzbank.cn"), ["wzbank.cn"])
+        self.assertEqual(ot.self_published_email("邮箱：a@other.com", "www.wzbank.cn"), [])
+
+    def test_extract_links_keeps_long_label(self):
+        # 阶段词常在标题末尾，截断会把「招标公告」切掉 → 阶段比对失效
+        html = '<html><body><a href="/x/1">温州银行股份有限公司关于杭州大楼绿植租摆养护服务项目采购公开招标公告</a></body></html>'
+        links = ot.extract_links(html, "https://www.wzbank.cn/")
+        self.assertEqual(len(links), 1)
+        self.assertTrue(links[0]["t"].endswith("公开招标公告"))
+        self.assertEqual(links[0]["h"], "https://www.wzbank.cn/x/1")
+
+    def test_hard_hit_survives_punctuation(self):
+        """标题里的「、（）」被 project_core 剥掉后，仍要在页面原文里匹配上（安徽交控实测）。"""
+        title = "2026年度安徽交控生态科技有限公司花卉绿植租赁、养管服务采购（三次）项目询价公告"
+        text = "2026年度安徽交控生态科技有限公司花卉绿植租赁、养管服务采购（三次）项目询价公告 正文如下"
+        got = ot._fetch_and_verify(
+            "https://www.ahjg.com/display.php?id=1", title=title, hints={"buyer": "安徽交控"},
+            publish_date=None, portal_id="origin", wait_sec=0, download=False, min_score=0.5,
+            fetch_fn=lambda url, **_: {"ok": True, "error": None, "summary": text[:400], "text": text,
+                                       "pageTitle": title, "attachments": [], "session": "s"})
+        self.assertTrue(got["hardHit"])
+
+    def test_candidate_dedupe_keeps_different_ports(self):
+        """端口必须参与去重：温州银行采购栏目在 :8087，被 80 端口主站 URL 挤掉过。"""
+        results = [
+            {"title": "温州银行", "url": "https://www.wzbank.cn/"},
+            {"title": "温州银行采购信息", "url": "https://www.wzbank.cn:8087/purchase_info/list"},
+        ]
+        cands = ot._candidate_filter(results, registry=load_registry())
+        netlocs = {c["url"] for c in cands}
+        self.assertEqual(len(netlocs), 2)
 
 
 if __name__ == "__main__":

@@ -118,7 +118,9 @@ def main(argv: list[str] | None = None) -> int:
         )
         pub = origin_trace.public_record(rec)
         applied = {}
-        if args.apply and rec.get("status") in ("ok", "partial"):
+        if args.apply:
+            # 所有终态都落库：not_found / no_hint / portal_down 同样是结论
+            # （避免下轮重复劳动，并形成人工接手清单）；apply_record 内部只在 ok/partial 时才覆写正文。
             applied = origin_trace.apply_record(rec)
         stats = {"candidates": 1, "processed": 1, "ok": int(rec.get("status") == "ok"),
                  "partial": int(rec.get("status") == "partial"),

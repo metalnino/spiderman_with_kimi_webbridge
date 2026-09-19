@@ -187,16 +187,22 @@ def extract(text: str | None, title: str = "", *, use_ai: bool = True) -> dict:
     return merge(rule, ai)
 
 
-def search_queries(hints: dict, title: str = "", *, max_queries: int = 4) -> list[str]:
-    """线索 → 外部检索词（按「能唯一定位到源头」的强度排序）。
+def search_queries(hints: dict, title: str = "", *, max_queries: int = 5) -> list[str]:
+    """线索 → 外部检索词（**按实测命中率排序**，不是靠直觉）。
 
-    四类（实测有效）：
-      ① 项目编号（唯一，直接命中源头详情页）；
-      ② 项目核心名（多数站按标题收录转载页，能带出一手平台）；
-      ③ 核心名 + 原始公告（把「交易公告/原始发布」类页面顶上来）；
-      ④ **平台发现型**：主体 + 「招标采购交易平台」——这一条是用来找「主体自己在哪个平台发」的，
-         实测能把 gov 交易平台/一手门户顶出来（如 ggzy.hzctc.hangzhou.gov.cn），
-         而纯标题检索只会一直返回镜像站。
+    2026-09-20 实测（Bing，真源头域作标准答案）：
+
+    | 检索词形态 | 温州银行→wzbank.cn | 安徽交控→ahjg.com | 深圳→szexgrp.com |
+    | --- | --- | --- | --- |
+    | `{采购人} 招标采购交易平台` | ✗ | ✗ | ✗ |
+    | `{采购人} 采购公告` | ✅ 第1位 | ✅ 第1位 | ✅（用对主体后第2位） |
+    | `{采购人} {核心名}` | ✗ | ✗ | ✗ |
+    | `{核心名}` | ✗ | ✗ | ✗ |
+
+    结论：**「主体名 + 采购公告」是唯一稳定把一手源顶到首屏的形态**。原因是聚合站 SEO 抢的是
+    「项目名 + 公告」，而企业官网/政府采购网的页面标题是「<主体>…采购公告」——
+    必须用**主体名**去检索，才能把官网从镜像堆里捞出来。
+    「招标采购交易平台」「原始公告」这类词实测毫无命中，已删除。
     """
     from crawl.stage import project_core
 
@@ -206,24 +212,38 @@ def search_queries(hints: dict, title: str = "", *, max_queries: int = 4) -> lis
     qs: list[str] = []
     if code and len(str(code)) >= 8:
         qs.append(f'"{code}"')
-    if core:
-        # 核心名常自带主体前缀（project_core 保留公司名），再加主体就成了重复词，反而降权
-        if buyer and not core.startswith(str(buyer)[:6]):
-            qs.append(f"{buyer} {core}")
-        qs.append(core)
     if buyer:
-        # 平台发现型（排在「原始公告」之前：它才是找一手平台的那一条）
-        qs.append(f"{buyer} 招标采购交易平台")
-    elif core:
-        qs.append(f"{core} 交易平台")
+        qs.append(f"{buyer} 采购公告")          # ← 实测命中率最高，放最前
+        qs.append(f"{buyer} 招标公告")
+    if buyer and core and not core.startswith(str(buyer)[:6]):
+        qs.append(f"{buyer} {core}")
     if core:
-        qs.append(f"{core} 原始公告")
+        qs.append(core)
     seen: list[str] = []
     for q in qs:
         q = re.sub(r"\s+", " ", q).strip()
         if q and q not in seen:
             seen.append(q)
     return seen[:max_queries]
+
+
+# 一手源「像不像」的快速判据（用于检索早停，不做最终认定）
+def looks_like_origin_domain(url: str, hints: dict | None = None, *, registry: dict | None = None) -> bool:
+    """检索结果里是否出现「疑似一手域」：已登记平台 / gov / 域名含主体英文 token。"""
+    import re as _re
+    from crawl.origin_portals import classify_domain, domain_of, load_registry
+
+    host = domain_of(url)
+    if not host:
+        return False
+    if classify_domain(url, registry=registry or load_registry()) in ("head", "gov", "platform"):
+        return True
+    if host.endswith(".gov.cn"):
+        return True
+    buyer = str((hints or {}).get("buyer") or "")
+    # 主体名里的拉丁 token（如 WZBank、AHJG）与域名比对
+    toks = [t.lower() for t in _re.findall(r"[A-Za-z]{3,}", buyer)]
+    return any(t in host for t in toks)
 
 
 def domain_of(url: str) -> str:

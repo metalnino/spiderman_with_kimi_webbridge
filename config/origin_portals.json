@@ -80,6 +80,19 @@
       "note": "域名由 2026-08-23 web_search 验证归属；抓取适配器未实测。"
     },
     {
+      "id": "szexgrp",
+      "name": "深圳交易集团（深圳阳光采购平台）",
+      "home": "https://www.szexgrp.com/",
+      "domains": ["szexgrp.com", "szggzy.com", "szcg.cn"],
+      "buyerKeywords": [],
+      "level": "platform",
+      "quality": "high",
+      "adapter": "http_detail",
+      "search": { "url": "https://ygcg.szexgrp.com/api/v1/trade/content/page", "note": "已有 JSON API 采编能力（szexgrp 源）；详情页 ygcgDetail/jyxxDetails" },
+      "verified": "2026-09-20",
+      "note": "**自有平台 ≠ 聚合站**：它是深圳交易集团自己的发布平台（一手），同时也在我们的采集源里。因此必须在 aggregatorDomains 之外登记，否则追溯时会把一手页误判成聚合站（实测 10 行被误判）。"
+    },
+    {
       "id": "ccgp",
       "name": "中国政府采购网",
       "home": "http://www.ccgp.gov.cn/",
@@ -108,7 +121,7 @@
   ],
   "aggregatorDomains": [
     "chinabidding.cn", "chinabidding.com.cn", "qianlima.com", "yfbzb.com",
-    "zhaobiao.cn", "cebpubservice.com", "ggzy.gov.cn", "szexgrp.com",
+    "zhaobiao.cn", "cebpubservice.com", "ggzy.gov.cn",
     "bidcenter.com.cn", "okcis.cn", "caizhaowang.com", "jianyu360.cn",
     "wuyezhaobiao.cn", "zbytb.com", "biaotongtong.com", "chinamae.com",
     "jrzb.com", "fuzhuangzhaobiao.com", "ygbid.com", "dlnyzb.com", "dnezb.com",
