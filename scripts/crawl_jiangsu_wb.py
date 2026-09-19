@@ -151,6 +151,7 @@ def main(keywords: list[str] | None = None) -> dict:
         return {"status": "failed", "error": "webbridge_not_available", "notices": []}
     run_id = start_run("jiangsu_zhaobiao")
     all_notices: list[Notice] = []
+    upserted = 0  # 增量落库累计（attempted 行数），中途被杀也能自证「采到过什么」
     try:
         # 暖场：先访问首页（模拟真人浏览入口），随机停留
         nav = wb.navigate(HOME, session=SESSION, group_title="jiangsu-crawl", new_tab=True)
@@ -173,6 +174,14 @@ def main(keywords: list[str] | None = None) -> dict:
             notices = parse_items(raw, kw)
             print(f"[jiangsu-wb] {kw} items={len(notices)}", flush=True)
             all_notices.extend(notices)
+            if notices:
+                # 增量落库（2026-09-19）：外部终结/掉电/任务被杀时，已采部分必须留在库里。
+                # 原实现把 upsert 放在整个词循环之后 —— 09-19 00:39 那轮采了 29 个词（真实条数
+                # 18/10/5/24/…），进程被外部杀掉后一条都没入库（notices 里江苏当天更新 0 条）。
+                try:
+                    upserted += int(upsert_notices(notices).get("attempted") or 0)
+                except Exception as e:  # noqa: BLE001 —— 落库失败只记录，不中断采集
+                    print(f"[jiangsu-wb] 增量落库失败(继续采集): {str(e)[:120]}", flush=True)
             if not raw:
                 empty_streak += 1
                 if empty_streak >= 3:
@@ -185,18 +194,26 @@ def main(keywords: list[str] | None = None) -> dict:
                 wb.evaluate(MOUSE_JS, session=SESSION)
             except Exception:
                 pass
-        stats = upsert_notices(all_notices)
-        finish_run(run_id, status="success", item_count=stats["attempted"], note=f"jiangsu-wb items={len(all_notices)}")
-        print(json.dumps({"items": len(all_notices), **stats}, ensure_ascii=False))
+        stats = upsert_notices(all_notices)  # 幂等兜底（与增量重复不新增行）
+        total = max(upserted, int(stats.get("attempted") or 0))
+        finish_run(run_id, status="success", item_count=total,
+                   note=f"jiangsu-wb items={len(all_notices)} incremental={upserted}")
+        print(json.dumps({"items": len(all_notices), "incremental": upserted, **stats}, ensure_ascii=False))
         return {
             "status": "success",
             "error": None,
             "notices": [{**asdict(n), "content_hash": n.content_hash()} for n in all_notices],
         }
     except Exception as e:  # noqa: BLE001
-        finish_run(run_id, status="failed", item_count=0, note=str(e)[:500])
-        print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
-        return {"status": "failed", "error": str(e)[:300], "notices": []}
+        # 已增量落库的部分必须如实上报（partial），绝不报成 0 —— 否则台账出现「假 0」
+        finish_run(run_id, status=("partial" if upserted else "failed"), item_count=upserted,
+                   note=f"jiangsu-wb aborted, incremental={upserted}: {str(e)[:300]}")
+        print(json.dumps({"ok": False, "error": str(e), "incremental": upserted}, ensure_ascii=False))
+        return {
+            "status": "partial" if upserted else "failed",
+            "error": str(e)[:300],
+            "notices": [{**asdict(n), "content_hash": n.content_hash()} for n in all_notices],
+        }
     finally:
         # 用完关 tab，避免浏览器堆积标签页吃内存卡死
         try:

@@ -15,7 +15,7 @@ stdout 打印 {ok, employee, implements, output, reportPath, metrics, handoffPat
 字段：{runId, implements, generatedAt, items}，items 与契约 output 同构（管道契约铁律）。
 环境变量 SPIDER_HANDOFF_DIR 可重定向（测试用）。
 
-启动自记录日志（2026-09-19 新增，入口黑盒问题的修复）：
+启动自记录日志（2026-09-19 新增，入口黑盒问题的修复；实现见 crawl/run_log.py）：
   logs/collector_run_<YYYYmmdd_HHMMSS>.log   # 本轮 stdout/stderr 全量 + 崩溃栈，保留最近 30 份
   logs/collector_launch.json                 # 启动戳（pid/时间/cwd/argv/解释器/日志名）
 为什么需要：Windows 任务 SpidermanCollector 的动作是裸 `python.exe scripts\collector_run.py`，
@@ -31,7 +31,6 @@ Task 结果码 1、crawl_runs 零行、reports 与 handoffs 都停在 12:40、�
 from __future__ import annotations
 
 import argparse
-import faulthandler
 import json
 import os
 import sys
@@ -47,82 +46,23 @@ HANDOFF_DIR = Path(os.environ.get("SPIDER_HANDOFF_DIR") or (ROOT / "handoffs" / 
 # ---------------------------------------------------------------------------
 # 启动自记录（纯 stdlib，必须先于下面的重导入就位）
 # ---------------------------------------------------------------------------
+from crawl import run_log  # noqa: E402
+
 LOG_DIR = Path(os.environ.get("SPIDER_LOG_DIR") or (ROOT / "logs"))
 KEEP_RUN_LOGS = 30
-LOG_FILES: list = []
-
-
-class _Tee:
-    """把写往原流的每个 chunk 同时写进日志文件；原流被任务调度器丢弃也不丢证据。"""
-
-    def __init__(self, *streams):
-        self._streams = streams
-
-    def write(self, text):
-        for stream in self._streams:
-            try:
-                stream.write(text)
-            except Exception:  # noqa: BLE001 —— 观测流绝不反噬主流程
-                pass
-        return len(text)
-
-    def flush(self):
-        for stream in self._streams:
-            try:
-                stream.flush()
-            except Exception:  # noqa: BLE001
-                pass
-
-    def isatty(self):
-        return False
-
-    def reconfigure(self, **kwargs):
-        return None
-
-    @property
-    def encoding(self):
-        return "utf-8"
-
-    @property
-    def errors(self):
-        return "replace"
-
-
-def _prune_run_logs() -> None:
-    try:
-        logs = sorted(LOG_DIR.glob("collector_run_*.log"))
-        for old in logs[:-KEEP_RUN_LOGS]:
-            try:
-                old.unlink()
-            except OSError:
-                pass
-    except Exception:  # noqa: BLE001
-        pass
+LOG_HANDLES: list = []
 
 
 def _install_run_log() -> None:
     """装 tee + 写启动戳。任何失败都不得挡住采集主流程。"""
     if os.environ.get("SPIDER_NO_RUN_LOG") == "1":
         return
+    handle = run_log.open_log(LOG_DIR / f"collector_run_{datetime.now():%Y%m%d_%H%M%S}.log")
+    if handle is None:
+        return
+    LOG_HANDLES.append(handle)
+    run_log.install(handle)
     try:
-        LOG_DIR.mkdir(parents=True, exist_ok=True)
-        run_log = LOG_DIR / f"collector_run_{datetime.now():%Y%m%d_%H%M%S}.log"
-        handle = open(run_log, "a", encoding="utf-8", errors="replace", buffering=1)
-        LOG_FILES.append(handle)
-        try:
-            faulthandler.enable(handle)  # 段错误/栈溢出等硬崩也留栈
-        except Exception:  # noqa: BLE001
-            pass
-        for name in ("stdout", "stderr"):
-            stream = getattr(sys, name, None)
-            if stream is None:
-                continue
-            if hasattr(stream, "reconfigure"):
-                try:
-                    stream.reconfigure(encoding="utf-8", errors="replace")
-                except Exception:  # noqa: BLE001
-                    pass
-            setattr(sys, name, _Tee(stream, handle))
         (LOG_DIR / "collector_launch.json").write_text(
             json.dumps(
                 {
@@ -131,16 +71,16 @@ def _install_run_log() -> None:
                     "cwd": str(Path.cwd()),
                     "argv": sys.argv[1:],
                     "executable": sys.executable,
-                    "logFile": run_log.name,
+                    "logFile": Path(handle.name).name,
                 },
                 ensure_ascii=False,
                 indent=2,
             ),
             encoding="utf-8",
         )
-        _prune_run_logs()
-    except Exception:  # noqa: BLE001
+    except OSError:
         pass
+    run_log.prune(LOG_DIR, "collector_run_*.log", KEEP_RUN_LOGS)
 
 
 # 只有「直接运行」才装日志：被 import（例如 tests/test_pipeline.py 按路径加载）时保持零副作用。
@@ -242,7 +182,7 @@ if __name__ == "__main__":
         print("[collector_run] FATAL 未捕获异常，栈见上方与本轮 log", file=sys.stderr, flush=True)
         code = 1
     finally:
-        for handle in LOG_FILES:
+        for handle in LOG_HANDLES:
             try:
                 handle.flush()
             except Exception:  # noqa: BLE001

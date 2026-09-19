@@ -171,6 +171,7 @@ def main(keywords: list[str] | None = None) -> dict:
 
     run_id = start_run("qianlima")
     all_notices: list[Notice] = []
+    upserted = 0  # 增量落库累计：中途被杀时已采部分必须留在库里（不能等词循环结束才写）
     first_err: str | None = None
     try:
         for i, kw in enumerate(kws):
@@ -187,6 +188,14 @@ def main(keywords: list[str] | None = None) -> dict:
                 items = parse_payload(data, kw)
                 print(f"[qianlima-wb] {kw} items={len(items)}", flush=True)
                 all_notices.extend(items)
+                if items:
+                    # 增量落库（2026-09-19）：外部终结/掉电/任务被杀时保留已采部分。
+                    try:
+                        kept_kw, _ = _filter_notices(items)
+                        if kept_kw:
+                            upserted += int(upsert_notices(kept_kw).get("attempted") or 0)
+                    except Exception as e:  # noqa: BLE001 —— 落库失败只记录，不中断采集
+                        print(f"[qianlima-wb] 增量落库失败(继续采集): {str(e)[:120]}", flush=True)
                 try:
                     wb.evaluate(MOUSE_JS, session=SESSION)
                 except Exception:  # noqa: BLE001
@@ -205,23 +214,30 @@ def main(keywords: list[str] | None = None) -> dict:
                     break
 
         kept, dropped = _filter_notices(all_notices)
-        stats = upsert_notices(kept)
+        stats = upsert_notices(kept)  # 幂等兜底（与增量重复不新增行）
+        total = max(upserted, int(stats.get("attempted") or 0))
         status = "failed" if (first_err and not kept) else ("partial" if first_err else "success")
         note = (
             f"qianlima-wb raw={len(all_notices)} kept={len(kept)} city_date_drop={dropped} "
-            f"upsert≈{stats['affected']} err={first_err or ''}"
+            f"incremental={upserted} upsert≈{stats['affected']} err={first_err or ''}"
         )[:500]
-        finish_run(run_id, status=status, item_count=stats["attempted"], note=note)
-        print(json.dumps({"status": status, "items": len(kept), **stats}, ensure_ascii=False))
+        finish_run(run_id, status=status, item_count=total, note=note)
+        print(json.dumps({"status": status, "items": len(kept), "incremental": upserted, **stats}, ensure_ascii=False))
         return {
             "status": status,
             "error": first_err,
             "notices": [{**asdict(n), "content_hash": n.content_hash()} for n in kept],
         }
     except Exception as e:  # noqa: BLE001
-        finish_run(run_id, status="failed", item_count=0, note=str(e)[:500])
-        print(json.dumps({"ok": False, "error": str(e)}, ensure_ascii=False))
-        return {"status": "failed", "error": str(e)[:300], "notices": []}
+        # 已增量落库的部分如实上报（partial），绝不报成 0 —— 否则台账出现「假 0」
+        finish_run(run_id, status=("partial" if upserted else "failed"), item_count=upserted,
+                   note=f"qianlima-wb aborted, incremental={upserted}: {str(e)[:300]}")
+        print(json.dumps({"ok": False, "error": str(e), "incremental": upserted}, ensure_ascii=False))
+        return {
+            "status": "partial" if upserted else "failed",
+            "error": str(e)[:300],
+            "notices": [{**asdict(n), "content_hash": n.content_hash()} for n in all_notices],
+        }
     finally:
         # 用完关 tab，避免浏览器堆积标签页吃内存卡死
         try:

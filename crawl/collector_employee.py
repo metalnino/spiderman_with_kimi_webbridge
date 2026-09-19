@@ -574,6 +574,19 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
         env = os.environ.get("SPIDER_MAX_PAGES")
         max_pages = int(env) if env and str(env).isdigit() else 1
 
+    # 孤儿行全局兜底（2026-09-19）：上一轮若被外部强杀，finish_run 不会执行，
+    # 行会永久停在 running（台账看着像「卡死」）。这里在本轮开始先闭环掉。
+    # 纯记账、失败不影响采集，故吞异常；被清扫的行进报告供自证。
+    orphans: list[dict] = []
+    try:
+        from crawl.db_store import sweep_orphan_runs
+
+        orphans = sweep_orphan_runs()
+        for o in orphans:
+            print(f"[collector] 孤儿运行行已闭环: #{o['id']} {o['source_id']} (started {o['started_at']})", flush=True)
+    except Exception as e:  # noqa: BLE001
+        print(f"[collector] 孤儿行清扫跳过: {type(e).__name__}: {str(e)[:120]}", flush=True)
+
     per_platform: list[dict] = []
     errors_by_platform: list = []
     fetched_total = 0
@@ -745,6 +758,8 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
             for p in per_platform if isinstance(p.get("watermark"), dict)
         },
     }
+    # 孤儿行入报告：上一轮被外部强杀留下的 running 行，本轮开头已闭环（自证台账不会永久「卡死」）
+    report["orphanRuns"] = orphans
     report["briefing"] = briefing
     report["autoBackfill"] = auto_backfill
 

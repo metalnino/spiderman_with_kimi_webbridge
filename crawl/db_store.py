@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Iterable
 
@@ -98,6 +98,45 @@ def finish_run(run_id: int, *, status: str, item_count: int, note: str | None = 
                     run_id,
                 ),
             )
+    finally:
+        conn.close()
+
+
+ORPHAN_NOTE = "orphaned: 进程被外部中断（未闭环），已由下轮全局清扫标记"
+
+
+def sweep_orphan_runs(*, max_age_hours: float = 3.0) -> list[dict]:
+    """全局兜底：把仍挂在 running、却明显不会再有进程收尾的历史行闭环，返回被清扫的行。
+
+    为什么需要：进程被外部强杀（掉电/被 kill/任务被终结）时 finish_run 永远不执行，
+    行会永久停在 running —— 台账看上去就是「卡死」，既不是站点的错也不可自证。
+    实证：2026-09-19 00:39 那轮采到 jiangsu_zhaobiao 时进程被杀，行 739 一直挂着 running。
+    start_run() 只在「同一个源下次再跑」时顺带清扫；若被杀的恰好是最后一个源，要等下一
+    整轮（十几小时）才闭环。所以在每轮采集开始时做一次全局兜底。
+    阈值默认 3 小时：本机单轮全站约 1.5~2 小时，正常在跑的源不可能挂 3 小时。
+    """
+    cutoff = (datetime.now() - timedelta(hours=max_age_hours)).strftime("%Y-%m-%d %H:%M:%S")
+    conn = connect(autocommit=True)
+    try:
+        with conn.cursor() as cur:
+            cur.execute(
+                "SELECT id, source_id, started_at FROM crawl_runs "
+                "WHERE status='running' AND started_at < %s ORDER BY id",
+                (cutoff,),
+            )
+            rows = cur.fetchall() or []
+            if not rows:
+                return []
+            ids = [int(r["id"]) for r in rows]
+            placeholders = ",".join(["%s"] * len(ids))
+            cur.execute(
+                "UPDATE crawl_runs SET finished_at=%s, status='failed', note=%s WHERE id IN (" + placeholders + ")",
+                tuple([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), ORPHAN_NOTE] + ids),
+            )
+        return [
+            {"id": int(r["id"]), "source_id": r["source_id"], "started_at": str(r["started_at"])}
+            for r in rows
+        ]
     finally:
         conn.close()
 

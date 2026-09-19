@@ -25,14 +25,41 @@ import os
 import signal
 import sys
 import time
+from datetime import datetime
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
-from crawl import webbridge_client as wb  # noqa: E402
+from crawl import run_log  # noqa: E402
 
 WATCH_HEARTBEAT = ROOT / "data" / "web" / "wb_watch_heartbeat.json"
+LOG_DIR = Path(os.environ.get("SPIDER_LOG_DIR") or (ROOT / "logs"))
+WATCH_LOG = LOG_DIR / "wb_watch.log"
+WATCH_LOG_HANDLES: list = []
+
+
+def _install_watch_log() -> None:
+    """保活自记录：它自己是「wb 不该挂」的执行者，但被 DEVNULL 掉就同样是黑盒。
+
+    实证 2026-09-19 00:38：心跳停更、桥随后掉线，System/Application 事件日志一条都没有，
+    连「保活什么时候死的」都查不出来。日志与心跳文件同源，任何失败都不挡保活。
+    """
+    if os.environ.get("SPIDER_NO_RUN_LOG") == "1":
+        return
+    handle = run_log.open_log(WATCH_LOG, rotate_bytes=2 * 1024 * 1024)
+    if handle is None:
+        return
+    WATCH_LOG_HANDLES.append(handle)
+    run_log.install(handle)
+    print(f"[wb_watch] start {datetime.now():%Y-%m-%d %H:%M:%S} pid={os.getpid()} argv={sys.argv[1:]}", flush=True)
+
+
+# 只有 watch 模式（常驻保活）才装日志，且必须在下面的重导入之前就位。
+if __name__ == "__main__" and len(sys.argv) > 1 and sys.argv[1] == "watch":
+    _install_watch_log()
+
+from crawl import webbridge_client as wb  # noqa: E402
 
 
 def watch_alive(max_age: float = 300.0) -> bool:
@@ -74,6 +101,7 @@ def ensure_daemon(*, interval: float = 120.0, stale_after: float = 300.0) -> dic
     try:
         p = subprocess.Popen(
             [sys.executable, str(Path(__file__).resolve()), "watch", "--interval", str(interval)],
+            # 子进程自己装日志（见 _install_watch_log），这里不重定向到同一文件，避免重复行
             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
             cwd=str(ROOT), **kwargs,
         )
