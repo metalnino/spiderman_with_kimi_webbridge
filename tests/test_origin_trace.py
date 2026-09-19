@@ -169,7 +169,8 @@ class TestCandidateFilter(unittest.TestCase):
         self.assertNotIn("www.qianlima.com", domains)
         self.assertNotIn("www.qcc.com", domains)
         self.assertEqual(cands[0]["domain"], "ec.chng.com.cn")  # head 排最前
-        self.assertEqual(cands[0]["score"], 1.0)
+        self.assertEqual(cands[0]["level"], "head")
+        self.assertGreater(cands[0]["score"], cands[-1]["score"])
 
 
 class TestFetchAndVerify(unittest.TestCase):
@@ -253,17 +254,20 @@ class TestTraceOneWithInjectedIO(unittest.TestCase):
 
     def _run(self, rows, search_rows):
         db = _FakeDB(rows)
+        # 抓到的页面必须**真的含这条公告的标题**：最终闸门（写库前再确认一次）就查这个，
+        # 假数据不含标题会被正确地拦成 partial。
+        seed_title = rows[0]["title"]
+        page_text = f"{seed_title} " + CHNG_BODY
+
+        def fake_fetch(url, **_):
+            return {"ok": True, "error": None, "summary": page_text[:2000], "text": page_text,
+                    "pageTitle": seed_title, "attachments": [], "links": [], "session": "s"}
+
         return ot.trace_one(
             project_key="k1", use_ai=False, download=False, db=db,
             search_portal_fn=lambda portal, kw: search_rows,
             search_web_fn=lambda q: [],
-            fetch_fn=lambda url, **_: {
-                "ok": True, "error": None,
-                "summary": "上海职场绿植租摆服务采购询比采购公告 " + CHNG_BODY,
-                "text": "上海职场绿植租摆服务采购询比采购公告 " + CHNG_BODY,
-                "pageTitle": "上海职场绿植租摆服务采购询比采购公告",
-                "attachments": [], "session": "s",
-            },
+            fetch_fn=fake_fetch,
         )
 
     def test_happy_path_via_registry(self):
@@ -373,15 +377,34 @@ class TestMethodFixes(unittest.TestCase):
                                        "pageTitle": title, "attachments": [], "session": "s"})
         self.assertTrue(got["hardHit"])
 
-    def test_candidate_dedupe_keeps_different_ports(self):
-        """端口必须参与去重：温州银行采购栏目在 :8087，被 80 端口主站 URL 挤掉过。"""
+    def test_candidate_dedupe_keeps_detail_pages_of_same_host(self):
+        """去重必须按 URL：同一站点会同时给出列表页与多条公告详情页。
+
+        历史 bug：按主机名去重 ⇒ 每站只留一个 URL，留下的常是列表页或**另一条**公告，
+        真源头详情页当场丢掉（温州银行/安徽交控实测）。
+        """
         results = [
+            {"title": "采购信息", "url": "https://www.wzbank.cn/purchase_info/list"},
+            {"title": "温州银行股份有限公司关于杭州大楼绿植租摆养护服务采购公开招标公告",
+             "url": "https://www.wzbank.cn/purchase_info/view/page_id/36919"},
+            {"title": "温州银行股份有限公司关于12台鲲鹏芯片服务器采购公开招标公告",
+             "url": "https://www.wzbank.cn/purchase_info/view/page_id/37391"},
             {"title": "温州银行", "url": "https://www.wzbank.cn/"},
-            {"title": "温州银行采购信息", "url": "https://www.wzbank.cn:8087/purchase_info/list"},
         ]
-        cands = ot._candidate_filter(results, registry=load_registry())
-        netlocs = {c["url"] for c in cands}
-        self.assertEqual(len(netlocs), 2)
+        cands = ot._candidate_filter(
+            results, registry=load_registry(),
+            seed_title="温州银行股份有限公司关于杭州大楼绿植租摆养护服务采购公开招标公告")
+        urls = [c["url"] for c in cands]
+        self.assertIn("https://www.wzbank.cn/purchase_info/view/page_id/36919", urls)
+        # 标题匹配的那条必须排第一（详情页 + 标题命中）
+        self.assertIn("page_id/36919", cands[0]["url"])
+
+    def test_url_shape_helpers(self):
+        self.assertTrue(ot._url_looks_detail("https://www.wzbank.cn/purchase_info/view/page_id/36919"))
+        self.assertTrue(ot._url_looks_detail("https://www.ahjg.com/display.php?id=12479"))
+        self.assertTrue(ot._url_looks_list("https://www.wzbank.cn/purchase_info/list"))
+        self.assertTrue(ot._url_looks_list("https://www.wzbank.cn/"))
+        self.assertFalse(ot._url_looks_list("https://www.wzbank.cn/purchase_info/view/page_id/36919"))
 
 
 if __name__ == "__main__":

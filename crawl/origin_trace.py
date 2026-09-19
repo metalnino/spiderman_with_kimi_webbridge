@@ -290,13 +290,43 @@ def library_origin(seed: dict, *, db=None, limit: int = 40) -> dict | None:
 
 # ---------------------------------------------------------------- 追溯主流程 ---
 
-def _candidate_filter(results: list[dict], *, registry: dict) -> list[dict]:
-    """外部检索结果 → 源头候选（排除镜像/聚合站，保留未知域与官方域）。"""
+# 详情页 vs 列表页/首页的 URL 形态判据（排序用，不做否决）
+_DETAIL_URL_RE = re.compile(r"(?:[?&](?:id|page_id|contentId|infoId|newsId|articleId)=\d+)"
+                            r"|/\d{4,}(?:[/.]|$)|[-_]\d{5,}\.", re.I)
+_LIST_URL_RE = re.compile(r"/(?:list|index|search|category|channel|column|more)(?:[/_.?]|$)", re.I)
+
+
+def _url_looks_detail(url: str) -> bool:
+    return bool(_DETAIL_URL_RE.search(url or ""))
+
+
+def _url_looks_list(url: str) -> bool:
+    from urllib.parse import urlparse
+
+    try:
+        p = urlparse(url or "").path
+    except Exception:  # noqa: BLE001
+        return False
+    return (not p or p == "/" or bool(_LIST_URL_RE.search(p))) and not _url_looks_detail(url)
+
+
+def _candidate_filter(results: list[dict], *, registry: dict,
+                      seed_title: str = "") -> list[dict]:
+    """外部检索结果 → 源头候选（排除镜像/企业信息站，**按 URL 去重**，按「像不像这条公告的详情页」排序）。
+
+    这里曾经有一个致命的去重 bug：**按主机名去重** ⇒ 每个站只留一个 URL。
+    而检索结果里同一个站往往同时给出「栏目列表页」和「好几条公告详情页」，
+    按主机名去重后留下的经常是列表页或**另一条**公告 ——
+    实测温州银行留下 `wzbank.cn/purchase_info/list`（列表页，被判 list_page 丢掉）、
+    安徽交控留下 `ahjg.com/m/display.php?id=12897`（另一条公告，被判 no_project_anchor）。
+    真源头的详情页 URL 明明就在同一次检索结果里。
+    现在改为**按完整 URL 去重**，并用「标题相似度 + 详情页形态 + 域定性」三者加权排序。
+    """
     from crawl.origin_portals import classify_domain, domain_of, is_mirror_title
 
     out: list[dict] = []
     seen: set[str] = set()
-    from urllib.parse import urlparse
+    from urllib.parse import urlparse, urlunparse
 
     for r in results or []:
         u = str(r.get("url") or "")
@@ -305,24 +335,27 @@ def _candidate_filter(results: list[dict], *, registry: dict) -> list[dict]:
         d = domain_of(u)
         if not d:
             continue
-        # 去重键必须**带端口**：温州银行的采购栏目挂在 www.wzbank.cn:8087，
-        # 若按端口无关的域名去重，它会被 80 端口的主站 URL 挤掉（实测真源头就是这样丢的）。
-        try:
-            netloc = urlparse(u).netloc.lower()
-        except Exception:  # noqa: BLE001
-            netloc = d
-        if netloc in seen:
-            continue
         if any(d == nd or d.endswith("." + nd) for nd in NON_SOURCE_DOMAINS):
             continue  # 企业信息站/门户转载：不是发布源，直接不进候选
-        seen.add(netloc)
-        level = classify_domain(u, registry=registry)
-        if level in ("aggregator",):
+        try:
+            sp = urlparse(u)
+            key = urlunparse((sp.scheme, sp.netloc.lower(), sp.path, sp.query, "", ""))
+        except Exception:  # noqa: BLE001
+            key = u
+        if key in seen:
             continue
-        score = {"head": 1.0, "gov": 0.9, "platform": 0.8}.get(level, 0.45)
+        seen.add(key)
+        level = classify_domain(u, registry=registry)
+        if level == "aggregator":
+            continue
+        level_score = {"head": 1.0, "gov": 0.9, "platform": 0.8}.get(level, 0.45)
+        ts = title_score(seed_title, r.get("title") or "") if seed_title else 0.0
         if is_mirror_title(r.get("title") or "", registry):
-            score -= 0.25
-        out.append({**r, "domain": d, "level": level, "score": round(max(score, 0.1), 2)})
+            ts -= 0.2
+        bonus = 0.15 if _url_looks_detail(u) else (-0.2 if _url_looks_list(u) else 0.0)
+        out.append({**r, "domain": d, "level": level,
+                    "titleScore": round(ts, 3),
+                    "score": round(max(0.05, 0.45 * level_score + 0.45 * ts + bonus), 3)})
     out.sort(key=lambda x: -x["score"])
     return out
 
@@ -497,7 +530,8 @@ def mirror_signals(text: str | None) -> list[str]:
 
 
 def _fetch_and_verify(url: str, *, title: str, hints: dict, publish_date=None, portal_id: str,
-                      wait_sec: float, download: bool, min_score: float, fetch_fn=None) -> dict:
+                      wait_sec: float, download: bool, min_score: float, fetch_fn=None,
+                      allow_bridge: bool = True) -> dict:
     """打开候选页并验证「确实是这条公告，且确实是源头页」。
 
     四道关：① 排除企业信息站等非发布源 ② 排除镜像页（品牌名/会员门）
@@ -508,9 +542,12 @@ def _fetch_and_verify(url: str, *, title: str, hints: dict, publish_date=None, p
 
     fetch = fetch_fn or _default_fetch
     host = domain_of(url)
+    _kw: dict = {"portal_id": portal_id, "wait_sec": wait_sec, "download": download}
+    if fetch_fn is None:
+        _kw["allow_bridge"] = allow_bridge
     if any(host == d or host.endswith("." + d) for d in NON_SOURCE_DOMAINS):
         return {"ok": False, "error": f"non_source_domain:{host}", "url": url, "score": 0.0}
-    page = fetch(url, portal_id=portal_id, wait_sec=wait_sec, download=download)
+    page = fetch(url, **_kw)
     if page.get("error"):
         return {"ok": False, "error": page["error"], "url": url}
     text = page.get("text") or ""
@@ -533,8 +570,12 @@ def _fetch_and_verify(url: str, *, title: str, hints: dict, publish_date=None, p
     ntext = _norm_text(text)
     ncore = _norm_text(core)
     ntitle = _norm_text(title)
-    title_hit = bool(len(ntitle) >= 10 and ntitle in ntext)   # 页面上有**完整标题**：最强证据
-    hard_hit = bool(title_hit or (len(ncore) >= 6 and ncore in ntext)
+    # 「完整标题命中」必须限定在**页面首屏区域**：详情页侧栏/底部的「相关公告」也会列出我们的标题，
+    # 整页匹配会把**另一条**公告的详情页判成目标页（实测温州银行 page_id/36965 就这样被误认成 36919）。
+    head_text = _norm_text(text[:900])
+    title_hit = bool(len(ntitle) >= 10 and ntitle in head_text)
+    title_anywhere = bool(len(ntitle) >= 10 and ntitle in ntext)
+    hard_hit = bool(title_anywhere or (len(ncore) >= 6 and ncore in ntext)
                     or (code and code in text))
     date_ok = date_consistent(text, publish_date)
     # 一手性：已登记平台/gov 天然可信；未知域必须有「自域邮箱」这类一手证据，否则只能算疑似
@@ -562,7 +603,8 @@ def _fetch_and_verify(url: str, *, title: str, hints: dict, publish_date=None, p
             "error": err, "level": level}
 
 
-def _default_fetch(url: str, *, portal_id: str, wait_sec: float, download: bool) -> dict:
+def _default_fetch(url: str, *, portal_id: str, wait_sec: float, download: bool,
+                   allow_bridge: bool = True) -> dict:
     """取一手页：**HTTP 直取优先，桥兜底**。
 
     为什么这个顺序是关键：一手源头里有大量「企业官网自建采购栏目」（温州银行 wzbank.cn、
@@ -570,6 +612,9 @@ def _default_fetch(url: str, *, portal_id: str, wait_sec: float, download: bool)
     它们全是静态/半静态、无 WAF 的普通 HTTP 站。而需要真浏览器的只有 SPA + WAF 那一小撮
     （华能 ec.chng.com.cn 纯 HTTP 412）。实测：候选预筛若一律开浏览器，8 个候选要 80 秒；
     走 HTTP 只要几秒，且能顺带直接发现附件直链（温州银行 4 个 docx 就在 HTML 里）。
+
+    allow_bridge=False 时不走桥兜底：候选池里大部分是普通站，遇到死域/不可达域时开桥要白等
+    十几秒（实测一个不可达镜像域就把单条追溯从 30s 拖到 104s）。只对前几个候选放开桥。
     """
     from crawl.origin_portals import fetch_origin_page
     from crawl.tenderfile import (
@@ -584,10 +629,12 @@ def _default_fetch(url: str, *, portal_id: str, wait_sec: float, download: bool)
         http = HttpSession("origin")
         html = http.get_text(url, headers={"Referer": url})
         if html and len(html) >= 400:
-            text = _page_summary(html) or ""
+            full = _plain(html)
+            text = full[:20000] or ""
             m = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
             title = _plain(m.group(1)) if m else ""
-            out.update(ok=True, text=text, summary=text, pageTitle=title, via="http",
+            # summary 先给前 2000 字；调用方会用「标题定位」再校正窗口
+            out.update(ok=True, text=text, summary=text[:2000] or None, pageTitle=title, via="http",
                        links=extract_links(html, url))
             if download:
                 atts = discover_attachment_urls(html, url) or []
@@ -601,6 +648,9 @@ def _default_fetch(url: str, *, portal_id: str, wait_sec: float, download: bool)
     except Exception as e:  # noqa: BLE001 —— 直取失败（WAF/超时/502）→ 桥兜底
         out["error"] = f"http_failed:{str(e)[:80]}"
 
+    if not allow_bridge:
+        out["via"] = "http_failed"
+        return out
     page = fetch_origin_page(url, portal_id=portal_id, wait_sec=wait_sec, download=download)
     if page.get("ok"):
         page["via"] = "bridge"
@@ -798,7 +848,8 @@ def descend(site_url: str, *, title: str, hints: dict, wait_sec: float, download
 def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
               origin_url: str | None = None,
               use_ai: bool = True, allow_discovery: bool = True, download: bool = True,
-              min_title_score: float = 0.55, max_candidates: int = 4,
+              deep_search: bool = True,
+              min_title_score: float = 0.55, max_candidates: int = 10,
               search_web_fn=None, search_portal_fn=None, fetch_fn=None, descend_fn=None,
               db=None) -> dict:
     """追溯单个项目（project_key 或 notice_id 二选一）。永不抛，失败如实落 status/error。
@@ -892,6 +943,7 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
 
         # ---- ③ 找源头 ----
         portal = match_portal(seed.get("title") or "", hints)
+        picked_page: dict | None = None
         detail_url = (origin_url if (origin_url or "").startswith("http")
                       else lib_url if (lib_url or "").startswith("http") else None)
         if detail_url and (origin_url or "").startswith("http"):
@@ -975,9 +1027,61 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
                         seen_urls.add(u)
                         results.append(r)
             rec["notes"].append(f"外部检索词 {len(used_queries)}/{len(queries)}：{' | '.join(used_queries)}")
+
+            # ---- 第二轮「深入检索」：拿到主体域后，用 site:{域} {核心名} 把该域下的详情页直接捞出来 ----
+            # 为什么必须有这一轮：第一轮 `{主体} 采购公告` 能把**主体自己的域**顶出来，
+            # 但它返回的多是域名/栏目首页或**另一条**公告；同一域下我们的目标公告还是要靠站内检索。
+            # 实测 `site:wzbank.cn 绿植租摆` → 直接返 5 条 wzbank.cn 的公告详情页；
+            # `site:ahjg.com 花卉绿植租赁` → 返 18 条 ahjg.com 的 display.php 详情页。
+            # 这比「站点级下降 + 翻页」既准又便宜（一次检索 vs 十几次页面抓取）。
+            if deep_search and results:
+                from crawl.origin_portals import classify_domain as _cd
+                from crawl.origin_portals import domain_of as _do
+                from crawl.origin_portals import load_registry as _lr
+                from crawl.stage import project_core as _pc
+
+                core_kw = _pc(seed.get("title") or "")[:24]
+                # project_core 的日期规则会把「2026年度」切成残留的「度」（`20\d{2}[-/年.]` 先命中
+                # 了「2026年」），当检索词就是脏的（实测 `site:www.ahjg.com 度安徽交控…`）。
+                # 不改 stage.project_core（动它会重算全库 project_key），只在这里清洗检索词。
+                core_kw = re.sub(r"^[度年\s\-_]+", "", core_kw).strip()
+                core_kw = re.sub(r"[（）()]", " ", core_kw)
+                core_kw = re.sub(r"\s+", " ", core_kw).strip()
+                seed_domains: list[str] = []
+                for r in results:
+                    u = str(r.get("url") or "")
+                    dd = _do(u)
+                    if not dd or dd in seed_domains or not core_kw:
+                        continue
+                    if any(dd == nd or dd.endswith("." + nd) for nd in NON_SOURCE_DOMAINS):
+                        continue
+                    if _cd(u) == "aggregator":
+                        continue
+                    seed_domains.append(dd)
+                    if len(seed_domains) >= 2:
+                        break
+                for dd in seed_domains:
+                    if any(c.get("titleScore", 0) >= 0.8 and _url_looks_detail(str(c.get("url")))
+                           for c in _candidate_filter(results, registry=_lr(),
+                                                      seed_title=seed.get("title") or "")):
+                        break  # 第一轮已有强命中，不必再深挖
+                    dq = f"site:{dd} {core_kw}"
+                    used_queries.append(dq)
+                    batch = sfn(dq) or []
+                    for r in batch:
+                        u = str(r.get("url") or "")
+                        if u and u not in seen_urls:
+                            seen_urls.add(u)
+                            results.append(r)
+                    rec["notes"].append(f"深入检索 {dq} → {len(batch)} 条")
+                    if any(_url_looks_detail(str(r.get("url") or ""))
+                           and title_score(seed.get("title") or "", r.get("title") or "") >= 0.8
+                           for r in batch):
+                        break
             from crawl.origin_portals import load_registry
 
-            cands = _candidate_filter(results, registry=load_registry())
+            cands = _candidate_filter(results, registry=load_registry(),
+                                      seed_title=seed.get("title") or "")
             rec["candidates"] = [{k: c.get(k) for k in ("title", "url", "domain", "level", "score")}
                                  for c in cands[:max_candidates]]
             if not rec.get("method"):
@@ -993,7 +1097,7 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
                                         portal_id=(portal or {}).get("id") or "origin",
                                         wait_sec=portal_wait(portal or {}, "detail", 10.0),
                                         download=download, min_score=min_title_score,
-                                        fetch_fn=ff)
+                                        fetch_fn=ff, allow_bridge=(tried <= 2))
                 c["reject"] = got.get("error")
                 c["score"] = round(float(got.get("score") or c.get("score") or 0), 3)
                 if (not got.get("ok") and descend_budget > 0
@@ -1022,6 +1126,7 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
                     if picked:
                         d, got2 = picked
                         detail_url = d["url"]
+                        picked_page = got2.get("page")
                         rec["matchScore"] = got2.get("score") or 0.0
                         rec["_trust"] = got2.get("trust") or "low"
                         if not rec.get("originLevel") or rec["originLevel"] == "unknown":
@@ -1036,7 +1141,12 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
                                        + ("/".join(rejects) if rejects else "no_candidate"))
                         rec["notes"].append(f"站点级下降未命中：{c['domain']}（{c.get('reject')}）")
                 if got.get("ok"):
-                    detail_url = c["url"]
+                    # 下降成功时 detail_url 已经指向**栏目里那条**详情页，
+                    # 这里绝不能再拿候选 URL（c["url"] 往往是站点/栏目首页）覆盖它——
+                    # 实测温州银行：下降已命中 36919，被这一行覆盖成首页，最终又抓到别的公告页。
+                    if picked_page is None:
+                        detail_url = c["url"]
+                        picked_page = got.get("page")
                     rec["matchScore"] = got.get("score") or 0.0
                     rec["_trust"] = got.get("trust") or "low"
                     rec["_selfMail"] = got.get("selfMail") or []
@@ -1049,7 +1159,8 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
                 rec["notes"].append(
                     f"外部检索候选 {len(cands)} 个（试 {tried} 个）均未通过源头校验："
                     + "；".join(f"{c['domain']}={c.get('reject')}" for c in cands[:tried]))
-            rec["candidates"] = [{k: c.get(k) for k in ("title", "url", "domain", "level", "score", "reject")}
+            rec["candidates"] = [{k: c.get(k) for k in ("title", "url", "domain", "level",
+                                                        "score", "titleScore", "reject")}
                                  for c in cands[:max_candidates]]
 
         if not detail_url:
@@ -1062,8 +1173,12 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
         if not rec.get("originLevel") or rec["originLevel"] == "unknown":
             rec["originLevel"] = classify_domain(detail_url)
         ff = fetch_fn or _default_fetch
-        page = ff(detail_url, portal_id=(portal or {}).get("id") or "origin",
-                  wait_sec=portal_wait(portal or {}, "detail", 10.0), download=download)
+        # 复用**已通过校验的那一次抓取**：候选验证与最终取正文若分成两次抓取，
+        # 两次结果可能不一致（实测温州银行最终那次抓到的是另一条公告页 page_id/36965，
+        # 而校验通过的是 36919）——那等于绕过了全部校验把未验证的页面写进库。
+        page = picked_page if picked_page else ff(
+            detail_url, portal_id=(portal or {}).get("id") or "origin",
+            wait_sec=portal_wait(portal or {}, "detail", 10.0), download=download)
         if page.get("error"):
             # 库内行已有一手正文时，抓取失败也能交付（例如源头站临时 502）
             lib_body = _body_of(lib) if lib else ""
@@ -1079,14 +1194,35 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
             rec["error"] = page["error"]
             return _finish(rec, t0)
         summary = page.get("summary") or ""
+        # 正文窗口对准标题：政府站/企业官网的页面开头常压着几十条导航菜单，
+        # 直接取前 2000 字会把**菜单当成正文**（实测温州银行取到的就是「网站地图/个人业务/…」）。
+        _first = (seed.get("title") or "").strip()[:12]
+        _full = page.get("text") or ""
+        if len(_first) >= 6 and len(_full) > 2100:
+            _q = _full.find(_first)
+            if _q > 200:
+                summary = _full[_q:_q + 2000]
+                rec["notes"].append(f"正文窗口已对准标题（原文偏移 {_q} 字）")
         atts = page.get("attachments") or []
         if atts:
             rec["attachments"] = [{"path": a.get("path"), "sourceUrl": a.get("sourceUrl"),
                                    "format": a.get("format")} for a in atts]
-            # 附件（原始采购文件/签章版公告）正文优先于页面摘要：
-            # 页面摘要只是网页壳（导航+字段），附件才是真正的一手招标文件（含限价/资格/评分）。
-            if atts[0].get("text"):
-                summary = atts[0]["text"][:2000]
+            # 附件正文优先 —— 但只在它**确实更厚**时：温州银行的 4 个附件是空白模板
+            # （「法定代表人授权书」277 字），而页面正文是完整的招标公告 2000 字；
+            # 一律让附件盖过页面会把最有用的一手正文丢掉。招必得则是反例（签章版 PDF 1318 字 >
+            # 页面壳 719 字），所以判据是「比页面摘要长」而不是「有附件就用附件」。
+            att_text = atts[0].get("text") or ""
+            if att_text and len(att_text) >= max(400, len(summary) * 1.2):
+                summary = att_text[:2000]
+        # 源头页是 JS 壳（HTTP 抓到空壳）时，回退到**库内那一行的正文**：
+        # 库内通道命中的往往正是我们采过的一手行（如 szexgrp），它自己的正文就在库里。
+        if len(summary) < 200 and lib:
+            lib_body = _body_of(lib)
+            if lib_body:
+                summary = lib_body[:5000]
+                rec["notes"].append("源头页为 JS 壳，正文回退到库内行已有正文")
+                if lib.get("tenderfile_path") and not atts:
+                    rec["_tenderfilePath"] = lib.get("tenderfile_path")
         rec["body"] = {"chars": len(summary), "path": None}
         rec["_summary"] = summary
         rec["_attachmentText"] = (atts[0].get("text") if atts else "") or ""
@@ -1094,19 +1230,31 @@ def trace_one(*, project_key: str | None = None, notice_id: int | None = None,
         if rec["_tenderfilePath"]:
             rec["body"]["path"] = rec["_tenderfilePath"]
 
-        # 人工提供的链接也要过一道锚点校验：人工可能给错（给成同项目的另一年/另一个标段）
-        from crawl.stage import project_core as _pc
+        # 最终闸门：写库前必须再确认「这页确实含这条公告」。
+        # 前面候选验证过了也要查——因为最终页可能来自另一次抓取（手工链接/库内通道/兜底重抓），
+        # 两次结果不一致时，这道闸门是唯一拦住「未验证页面被当成源头写进库」的地方。
+        from crawl.stage import project_core as _pc2
 
-        _core = _pc(seed.get("title") or "")
-        anchor_ok = bool(atts or (len(_core) >= 6 and _core in (page.get("text") or "")))
-        if rec.get("method") == "manual_url" and not anchor_ok:
-            rec["notes"].append("人工提供的源头页未命中项目核心名，标为 partial 待人工复核")
+        _core2 = _pc2(seed.get("title") or "")
+        # 判据用「页面全文 + 最终采用正文」两处一起看：源头页是 JS 壳时页面全文是空的，
+        # 但最终正文可能来自库内行/附件（那才是我们要写库的内容）。
+        _final_text = (page.get("text") or "") + "\n" + (summary or "")
+        _ntitle2 = _norm_text(seed.get("title") or "")
+        _anchor_ok2 = bool(
+            atts
+            or (len(_ntitle2) >= 10 and _ntitle2 in _norm_text(_final_text))
+            or (len(_core2) >= 6 and _norm_text(_core2) in _norm_text(_final_text))
+        )
 
         # 置信度：命中平台登记 + 标题高 → 高；仅外部检索命中 → 中；人工给链接 → 中
         base = {"manual_url": 0.7}.get(rec.get("method"), 0.85 if rec.get("portalId") else 0.65)
         rec["confidence"] = round(min(0.98, base * 0.6 + rec.get("matchScore", 0) * 0.4
                                       + (0.1 if rec["body"]["chars"] >= 300 else 0)), 3)
         rec["status"] = "ok" if (rec["body"]["chars"] >= 200 or atts) else "partial"
+        if not _anchor_ok2:
+            rec["status"] = "partial"
+            rec["error"] = rec.get("error") or "final_anchor_missing"
+            rec["notes"].append("最终页未命中项目标题/核心名，标 partial 待人工确认（不写入假源头）")
         if rec.get("method") == "manual_url" and not anchor_ok:
             rec["status"] = "partial"
             rec["error"] = rec.get("error") or "no_project_anchor"
