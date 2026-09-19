@@ -87,7 +87,8 @@ def load_cfg() -> dict:
 def pick_candidates(*, limit_total: int, per_source_limit: int, min_summary_chars: int,
                     exclude_sources=(), sources=None, retry_error_prefixes=()) -> list[dict]:
     """按优先级取候选（多取留 per-source 截断余量）。失败返回空列表，绝不抛。"""
-    pool = int(max(limit_total, 1) * 4)
+    # 内层已按 per_source_limit 逐站封顶，这里只是整体兜底（覆盖全部启用站点的上限之和）
+    pool = int(max(limit_total, per_source_limit * 12, 1))
     where = [
         "detail_url IS NOT NULL",
         "detail_url <> ''",
@@ -109,12 +110,21 @@ def pick_candidates(*, limit_total: int, per_source_limit: int, min_summary_char
         where.append(f"source_id NOT IN ({marks})")
         params.extend(list(exclude_sources))
     sql = (
-        "SELECT id, source_id, title, detail_url, notice_stage, publish_date FROM notices WHERE "
+        # 按站均衡取候选（窗口函数）：只做「全局排序 + 每站在 Python 里截断」会浪费预算 ——
+        # 实测 11:00 轮 processed=67 < 上限 80 就报 candidates_exhausted，因为前几个站把
+        # 每站上限吃满后，池子里剩下的就都是这些站、没有可用槽位了。
+        "SELECT id, source_id, title, detail_url, notice_stage, publish_date FROM ("
+        "  SELECT id, source_id, title, detail_url, notice_stage, publish_date,"
+        "         ROW_NUMBER() OVER (PARTITION BY source_id ORDER BY "
+        + STAGE_ORDER_SQL
+        + ", publish_date DESC, id DESC) AS rn"
+        "  FROM notices WHERE "
         + " AND ".join(where)
-        + " ORDER BY "
+        + ") t WHERE t.rn <= %s ORDER BY "
         + STAGE_ORDER_SQL
         + ", publish_date DESC, id DESC LIMIT %s"
     )
+    params.append(int(max(per_source_limit, 1)))  # 每站取够上限即可
     params.append(pool)
     conn = connect()
     try:

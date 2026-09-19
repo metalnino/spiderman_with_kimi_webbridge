@@ -52,11 +52,14 @@ class TestPickCandidates(unittest.TestCase):
         self.assertIn("CASE notice_stage", sql)
         self.assertIn("WHEN 'bidding' THEN 1", sql)
         self.assertIn("publish_date DESC", sql)
-        # 排除人工门站点 + 摘要长度门槛 + 池子大于单轮上限（留 per-source 截断余量）
+        # 排除人工门站点 + 摘要长度门槛 + 按站均衡取候选（窗口函数，避免前几站吃满上限后无槽位）
         self.assertIn("source_id NOT IN (%s,%s)", sql)
         self.assertIn("cebpub", params)
         self.assertIn(400, params)
-        self.assertEqual(params[-1], 40)  # pool = limit_total * 4
+        self.assertIn("ROW_NUMBER() OVER (PARTITION BY source_id", sql)
+        self.assertIn("t.rn <= %s", sql)
+        self.assertEqual(params[-2], 2)   # 每站上限
+        self.assertGreaterEqual(params[-1], 10)  # 整体兜底 LIMIT
         conn.close.assert_called_once()
 
     def test_no_exclude_and_sources_filter(self):
@@ -67,7 +70,8 @@ class TestPickCandidates(unittest.TestCase):
         sql, params = cur.execute.call_args[0]
         self.assertIn("source_id IN (%s,%s)", sql)
         self.assertNotIn("NOT IN", sql)
-        self.assertEqual(params[-1], 12)
+        self.assertEqual(params[-2], 1)          # 每站上限
+        self.assertGreaterEqual(params[-1], 3)   # 整体兜底 LIMIT
 
 
 class TestRunDetailPass(unittest.TestCase):
