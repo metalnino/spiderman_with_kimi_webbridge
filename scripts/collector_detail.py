@@ -1,9 +1,13 @@
 """采集员详情补全入口 —— 对「已入库但缺详情」的公告补详情/原发/转爬 + AI 字段抽取。
 
-这是采集员「从纯规则到 agent」的纵向补全，**独立于定时任务**（SpidermanCollector 11:00/22:00
-仍只做列表采集，不受影响）。手动或另配定时跑：
+**编排实现在 crawl/detail_pass.py，与采集轮共用同一份**（2026-09-19 起）：
+  - 定时链路：SpidermanCollector（11:00/22:00）在列表采集后会跑一个有界的详情正文补全阶段
+    （默认单轮 ≤80 条、每站 ≤10 条、限时 900s；配置见 config/anti_bot.json 的 `detail_pass`，
+    报告字段 `detailPass`）。此前这条链**没有任何定时入口**，导致 3166 条里 3103 条
+    detail_status 为 null、只有 7 条落了附件正文 —— 下游解析员直接断粮。
+  - 本脚本 = **手动/大批量**入口：不限时、不做优先级重排（候选沿用 `summary IS NULL` 口径）。
 
-  对每条缺详情公告（summary 为空且 detail_url 非空）：
+对每条候选公告：
     1) backfill_notice：详情抓取 → 原发寻址 → 原发转爬（规则，复用 P4/P5 能力）
     2) ai_enrich_notice：AI 对 summary 抽取规则缺失的字段兜底（可关）
 
@@ -47,63 +51,26 @@ def _candidates(limit: int) -> list[dict]:
 
 
 def run(*, limit_total: int = 20, per_source_limit: int = 5, use_ai: bool = True) -> dict:
-    stats: dict = {
-        "use_ai": use_ai,
-        "candidates": 0,
-        "processed": 0,
-        "detail_ok": 0,
-        "detail_failed": 0,
-        "ai_ok": 0,
-        "ai_failed": 0,
-        "per_source": {},
-        "errors": [],
-        "traces": [],  # 每条公告的决策链留痕（详情/原发/转爬/AI），供自评与调试
-    }
-    cands = _candidates(limit_total * 3)  # 多取留 per-source 截断余量
-    stats["candidates"] = len(cands)
-    done = 0
-    for c in cands:
-        if done >= limit_total:
-            break
-        sid = c["source_id"]
-        per = stats["per_source"].setdefault(sid, {"attempted": 0, "detail_ok": 0, "ai_ok": 0})
-        if per["attempted"] >= per_source_limit:
-            continue
-        per["attempted"] += 1
-        done += 1
-        trace: dict = {"id": c["id"], "source_id": sid, "title": (c.get("title") or "")[:40]}
-        # 1) 规则详情 + 原发寻址 + 原发转爬
-        try:
-            r = backfill_notice(c["id"])
-        except Exception as e:  # noqa: BLE001
-            r = {"ok": False, "error": f"{type(e).__name__}:{e}"[:120]}
-        trace["detail"] = {
-            "ok": bool(r.get("ok")),
-            "error": r.get("error"),
-            "origin_url": r.get("original_url"),
-            "origin_source": r.get("origin_source"),
-            "origin_fetched": bool(r.get("origin_fetched")),
-        }
-        if r.get("ok"):
-            stats["detail_ok"] += 1
-            per["detail_ok"] += 1
-        else:
-            stats["detail_failed"] += 1
-            stats["errors"].append({"id": c["id"], "source_id": sid, "error": r.get("error")})
-        # 2) AI 兜底（summary 为空时 ai_enrich 会如实 no_summary）
-        if use_ai:
-            try:
-                a = ai_enrich_notice(c["id"])
-            except Exception as e:  # noqa: BLE001
-                a = {"ok": False, "error": f"{type(e).__name__}:{e}"[:120]}
-            trace["ai"] = {"ok": bool(a.get("ok")), "filled": a.get("filled"), "error": a.get("error")}
-            if a.get("ok"):
-                stats["ai_ok"] += 1
-                per["ai_ok"] += 1
-            else:
-                stats["ai_failed"] += 1
-        stats["traces"].append(trace)
-    stats["processed"] = done
+    """手动入口编排 —— 真正的实现在 crawl/detail_pass.py（与采集轮共用同一份）。
+
+    手动跑：不限时（max_seconds=0）、候选沿用旧口径（`_candidates` 自己挑，不做优先级重排），
+    便于运维按需大批量补。定时链路（采集轮内）用的是优先级候选 + 三重封顶。
+    """
+    from crawl.detail_pass import run_detail_pass
+
+    stats = run_detail_pass(
+        limit_total=limit_total,
+        per_source_limit=per_source_limit,
+        max_seconds=0,
+        min_summary_chars=0,
+        use_ai=use_ai,
+        retry_error_prefixes=(),
+        candidates_fn=lambda: _candidates(limit_total * 3),
+        backfill_fn=backfill_notice,  # 保留模块级引用：单测可注入
+        ai_fn=ai_enrich_notice,
+        log=lambda msg: print(msg, flush=True),
+    )
+    stats["detail_failed"] = stats["failed"]  # 兼容旧键名
     return stats
 
 

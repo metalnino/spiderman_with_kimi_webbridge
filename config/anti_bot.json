@@ -49,6 +49,18 @@
     "avoid_isTrusted_sites_without_cdp": true,
     "captcha_policy": "pause_for_human"
   },
+  "detail_pass": {
+    "$comment": "采集轮内的有界详情正文补全（详情→原发寻址→原发转爬 + AI 兜底）。2026-09-19 新增：此前这条链没有任何定时入口，导致 3166 条里 3103 条 detail_status 为 null、仅 7 条落附件正文。",
+    "enabled": true,
+    "limit_total": 80,
+    "per_source_limit": 10,
+    "max_seconds": 900,
+    "min_summary_chars": 400,
+    "use_ai": false,
+    "exclude_sources": ["cebpub", "rccchina"],
+    "retry_error_prefixes": ["err:bridge", "err:detail_page", "err:fetch"],
+    "$env": "SPIDER_NO_DETAIL_PASS=1 关闭；SPIDER_DETAIL_AI=1 开 AI 兜底；SPIDER_DETAIL_PASS_TOTAL/PER_SOURCE/MAX_SEC 覆盖配额。cebpub 需人工过一次 vaptcha（每条 15~20s 且必失败）故默认排除。"
+  },
   "per_source": {
     "ggzy": {
       "primary": "http",

@@ -670,6 +670,45 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
     for it in output:
         it.pop("notice_stage", None)
 
+    # ---- 2026-09-19：详情正文补全（有界，配置驱动）----
+    # 为什么放在采集轮里：完整链（详情 → 原发寻址 → 原发转爬 + AI 兜底）此前**没有任何定时入口**
+    # —— collector_detail.py 没接任务，本机又无权新建计划任务（Register-ScheduledTask 需提权）；
+    # 轮内 enrich_source_details 只做字段级、auto_backfill_pass 只碰可投标阶段缺金额的 HTTP 站。
+    # 后果实测：3166 条里 3103 条 detail_status 为 null、只有 7 条落了附件正文，下游解析员断粮。
+    detail_pass_stats: dict = {"enabled": False}
+    try:
+        from crawl.detail_pass import load_cfg as _dp_cfg
+        from crawl.detail_pass import run_detail_pass as _dp_run
+
+        _dp = _dp_cfg()
+        if _dp.get("enabled"):
+            print(
+                f"[collector] 详情正文补全开始：单轮≤{_dp['limit_total']} 每站≤{_dp['per_source_limit']} "
+                f"限时{_dp['max_seconds']}s ai={_dp['use_ai']} 排除={_dp.get('exclude_sources')}",
+                flush=True,
+            )
+            detail_pass_stats = _dp_run(
+                limit_total=int(_dp["limit_total"]),
+                per_source_limit=int(_dp["per_source_limit"]),
+                max_seconds=int(_dp["max_seconds"]),
+                min_summary_chars=int(_dp["min_summary_chars"]),
+                use_ai=bool(_dp["use_ai"]),
+                exclude_sources=tuple(_dp.get("exclude_sources") or ()),
+                retry_error_prefixes=tuple(_dp.get("retry_error_prefixes") or ()),
+                log=lambda m: print(m, flush=True),
+            )
+            print(
+                f"[collector] 详情正文补全完成：处理 {detail_pass_stats['processed']} 条、"
+                f"拿到附件正文 {detail_pass_stats['text_ok']} 条、摘要 {detail_pass_stats['summary_ok']} 条、"
+                f"耗时 {detail_pass_stats['elapsed_ms'] / 1000:.0f}s、停止原因={detail_pass_stats['stopped_reason']}",
+                flush=True,
+            )
+        else:
+            detail_pass_stats = {"enabled": False}
+    except Exception as e:  # noqa: BLE001 —— 详情补全失败绝不影响主采集结果
+        detail_pass_stats = {"enabled": True, "error": f"{type(e).__name__}:{e}"[:200]}
+        print(f"[collector] 详情正文补全跳过：{detail_pass_stats['error']}", flush=True)
+
     # ---- 邮件验证码回传闭环：rccchina 本轮撞墙 → 自动发请求邮件+轮询回复登录（人不在家场景）----
     email_auth = {"skipped": True, "reason": "no_wall"}
     if "rccchina" in run_list and "SPIDER_NO_EMAIL_AUTH" not in os.environ:
@@ -751,6 +790,13 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
         "open_todos": _open_todo_count(),
         "window_note": window_note,
         "auto_backfill": auto_backfill,
+        # 详情正文补全（2026-09-19）：text_ok=本轮真正拿到附件正文的条数（下游解析员的料）
+        "detail_pass": {
+            "processed": detail_pass_stats.get("processed"),
+            "text_ok": detail_pass_stats.get("text_ok"),
+            "summary_ok": detail_pass_stats.get("summary_ok"),
+            "stopped_reason": detail_pass_stats.get("stopped_reason"),
+        },
         "email_auth": email_auth,
         # P7 覆盖自证：每站水位推进（wm_new=本轮新见原始 id，wm_total=水位规模，pages=扫描页数）
         "coverage": {
@@ -760,6 +806,7 @@ def run(inp: Optional[dict] = None, *, max_pages: Optional[int] = None) -> dict:
     }
     # 孤儿行入报告：上一轮被外部强杀留下的 running 行，本轮开头已闭环（自证台账不会永久「卡死」）
     report["orphanRuns"] = orphans
+    report["detailPass"] = detail_pass_stats
     report["briefing"] = briefing
     report["autoBackfill"] = auto_backfill
 

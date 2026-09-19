@@ -4,10 +4,15 @@ from __future__ import annotations
 import hashlib
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
 import zipfile
+
+# 本模块多处直接调用 ce.run()。采集轮内新增的「详情正文补全」阶段会查真实 DB 并访问外网，
+# 单测必须离线 —— 这里整模块关闭（与 SPIDER_NO_AUTO_BACKFILL 同一测试缝机制）。
+os.environ.setdefault("SPIDER_NO_DETAIL_PASS", "1")
 from pathlib import Path
 from unittest import mock
 

@@ -213,12 +213,33 @@ def backfill_notice(notice_id: int) -> dict:
         fields = fetch_detail(sid, url)
         err = fields.pop("_error", None) if isinstance(fields, dict) else None
         summary = fields.pop("summary", None) if isinstance(fields, dict) else None
-        if not fields:
-            reason = err or "fetch_failed"
+        # 2026-09-19：字段抓完不能就此 return —— ccgp 详情页同样挂招标文件附件，
+        # 原实现在这里直接返回，附件链从未执行（实测 ccgp 一条正文都没落过）。这里追加附件尝试并合并。
+        try:
+            tf = fetch_tenderfile(sid, url) or {}
+        except Exception as e:  # noqa: BLE001 —— 附件链失败不影响已抓到的字段
+            tf = {"error": f"{type(e).__name__}:{e}"[:120]}
+        tf_path = ((tf.get("tenderFile") or {}).get("path")) or None
+        tf_summary = tf.get("summary")
+        if tf_path or len(tf_summary or "") > len(summary or ""):
+            summary = tf_summary or summary
+        tf_fields = tf.get("fields") or {}
+        if tf_fields:
+            fields = {**tf_fields, **(fields or {})}  # 规则字段优先（详情页解析更可信）
+        if not fields and not tf_path and not summary:
+            reason = err or tf.get("error") or "fetch_failed"
             _save_result(notice_id, detail_status=f"err:{reason[:24]}")
             return {"ok": False, "error": reason, "source_id": sid}
-        _save_result(notice_id, fields=fields, summary=summary, detail_status="ok")
-        return {"ok": True, "source_id": sid, "fields": fields, "summary": summary}
+        _save_result(notice_id, fields=fields or None, summary=summary,
+                     tenderfile_path=tf_path, detail_status="ok")
+        return {
+            "ok": True,
+            "source_id": sid,
+            "fields": fields,
+            "summary": summary,
+            "tenderfile_path": tf_path,
+            "error": None,
+        }
 
     if sid in SUMMARY_SOURCES:
         tf = fetch_tenderfile(sid, url)

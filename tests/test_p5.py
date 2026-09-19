@@ -2,9 +2,13 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
+
+# 本模块调用 ce.run()；采集轮内的「详情正文补全」阶段会查真实 DB 并访问外网，单测必须离线。
+os.environ.setdefault("SPIDER_NO_DETAIL_PASS", "1")
 from datetime import date
 from pathlib import Path
 from unittest import mock

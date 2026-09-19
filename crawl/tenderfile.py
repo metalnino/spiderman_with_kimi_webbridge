@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import random
 import re
 import sys
@@ -65,8 +66,11 @@ HTTP_DETAIL_SOURCES = tuple(p for p, m in DETAIL_MODES.items() if m in ("http", 
 MAX_ATTACHMENT_BYTES = 30 * 1024 * 1024
 # 提取正文长度上限（防输出爆炸）
 MAX_TEXT_CHARS = 200_000
-# summary 长度
-SUMMARY_CHARS = 200
+# summary 长度（2026-09-19：200 → 2000）
+# 下游「解析员」要的是**正文**，200 字等于没正文 —— 实测 jiangsu/yfbzb/chinabidding/qianlima/tgnet
+# 的 summary 均长与最长都正好 200（被这里截断），而 ccgp(crawl/detail.py) 与 szexgrp 早就是 2000，
+# 口径本来就不一致。统一到 2000，可用 SPIDER_SUMMARY_CHARS 覆盖。
+SUMMARY_CHARS = int(os.environ.get("SPIDER_SUMMARY_CHARS") or 2000)
 
 _EXT_FORMAT = {
     "pdf": "pdf",
